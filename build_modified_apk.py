@@ -15,7 +15,7 @@ print(f"Reading source APK from {SRC_APK}...")
 
 # 1. New gwsc.properties content
 NEW_GWSC_PROP = (
-    "SERVER_NAME=Gooneral Wheelchair Social Club (Local)\n"
+    "SERVER_NAME=Unknown Beaches Social Club (Local)\n"
     "SERVER_HOST=127.0.0.1:8443\n"
     "WEB_URL=https://127.0.0.1:8443/\n"
     "SELF_SIGNED_CERT=1\n"

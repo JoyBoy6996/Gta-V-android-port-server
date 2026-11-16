@@ -3,7 +3,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
-SERVER_NAME = os.getenv("GWSC_SERVER_NAME", "Gooneral Wheelchair Social Club")
+SERVER_NAME = os.getenv("GWSC_SERVER_NAME", "Unknown Beaches Social Club")
 SERVER_VERSION = os.getenv("GWSC_SERVER_VERSION", "1.0.0")
 SERVER_HOST = os.getenv("GWSC_HOST", "0.0.0.0")
 

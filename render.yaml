@@ -8,6 +8,6 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: GWSC_SERVER_NAME
-        value: Gooneral Wheelchair Social Club
+        value: Unknown Beaches Social Club
       - key: GWSC_REGISTRATION
         value: "true"

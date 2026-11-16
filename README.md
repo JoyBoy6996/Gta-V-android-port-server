@@ -1,6 +1,6 @@
 # GTA V Android Port - GWSC Local & Cloud Server
 
-Complete, functional backend replacement and private server for the Grand Theft Auto V Android port with Gooneral Wheelchair Social Club (GWSC) integration.
+Complete, functional backend replacement and private server for the Grand Theft Auto V Android port with Unknown Beaches Social Club (GWSC) integration.
 
 Supports running locally in **Android Termux** and cloud deployment on **[Render](https://render.com)**.
 
