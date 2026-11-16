@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+.venv/
+**/.venv
+venv/
+**/venv
+ENV/
+
+# Logs and PIDs
+*.log
+logs/
+server.pid
+
+# Database files
+*.db
+*.sqlite3
+data/
+
+# Backups
+backups/
+
+# SSL Keys and Certs
+*.pem
+*.key
+*.crt
+
+# Local analysis and temporary binaries
+analysis/
+game_android_local_gwsc.apk
+
+# Temporary files
+*.tmp
+.DS_Store
