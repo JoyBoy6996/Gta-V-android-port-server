@@ -1,0 +1,36 @@
+services:
+  gwsc:
+    build: .
+    container_name: gwsc
+    restart: unless-stopped
+    ports:
+      - "8443:8443/tcp"
+      - "6672:6672/udp"
+    environment:
+      GWSC_ENV: production
+      GWSC_SSL_ENABLED: "false"
+      GWSC_TRUST_PROXY: "true"
+      GWSC_DOCS_ENABLED: "false"
+      GWSC_CAPTURE_ENABLED: "false"
+      GWSC_REGISTRATION: "true"
+      GWSC_SERVER_NAME: Unknown Beaches Social Club
+      # Set this to the public hostname clients use for matchmaking.
+      GWSC_PUBLIC_HOST: ""
+      DATA_DIR: /data
+      GWSC_LOG_DIR: /logs
+      GWSC_BACKUP_DIR: /backups
+    volumes:
+      - gwsc-data:/data
+      - gwsc-logs:/logs
+      - gwsc-backups:/backups
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8443/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  gwsc-data:
+  gwsc-logs:
+  gwsc-backups:

@@ -5,48 +5,56 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "=================================================="
-echo " GWSC Local Server - Termux Installation Script   "
+echo " GWSC Private Server - Termux Installation        "
 echo "=================================================="
 
-# Check Python and OpenSSL
 if ! command -v python3 >/dev/null 2>&1; then
-    echo "[!] Error: python3 is not installed. Please install it with: pkg install python"
+    echo "[!] python3 is required. Install it with: pkg install python"
     exit 1
 fi
-
 if ! command -v openssl >/dev/null 2>&1; then
-    echo "[!] Error: openssl is not installed. Please install it with: pkg install openssl"
+    echo "[!] openssl is required. Install it with: pkg install openssl"
     exit 1
 fi
 
-echo "[*] Python: $(python3 --version)"
+echo "[*] Python:  $(python3 --version)"
 echo "[*] OpenSSL: $(openssl version)"
 
-# Setup virtual environment if not present
-if [ ! -d ".venv" ]; then
-    # Check if existing venv can be used or create one
-    if [ -d "$HOME/gtav/gwsc-termux-test/.venv" ]; then
-        echo "[*] Linking existing pre-built virtual environment..."
-        ln -s "$HOME/gtav/gwsc-termux-test/.venv" .venv
-    else
-        echo "[*] Creating Python virtual environment..."
-        python3 -m venv .venv
-        .venv/bin/pip install --upgrade pip
-        .venv/bin/pip install -r requirements.txt
-    fi
+# Repair a broken .venv symlink from older packages.
+if [ -L ".venv" ] && [ ! -e ".venv" ]; then
+    echo "[*] Removing broken .venv symlink"
+    rm -f .venv
 fi
 
-PYTHON="$SCRIPT_DIR/.venv/bin/python"
+if [ ! -x ".venv/bin/python" ]; then
+    echo "[*] Creating Python virtual environment..."
+    python3 -m venv .venv
+fi
+
+echo "[*] Installing runtime dependencies..."
+.venv/bin/pip install --upgrade pip >/dev/null
+.venv/bin/pip install -r requirements.txt
+
+if [ "${1:-}" = "--dev" ]; then
+    echo "[*] Installing test dependencies..."
+    .venv/bin/pip install -r ../requirements-dev.txt
+fi
 
 export PYTHONPATH="$(cd "$SCRIPT_DIR/.." && pwd):$PYTHONPATH"
 
-echo "[*] Generating SSL certificates (cert.pem / key.pem)..."
-$PYTHON -m gwsc_local_termux.generate_certs
+echo "[*] Generating TLS certificates (cert.pem / key.pem)..."
+.venv/bin/python -m gwsc_local_termux.generate_certs
 
 echo "[*] Initializing SQLite database..."
-$PYTHON -c "from gwsc_local_termux.database import init_db; init_db()"
+.venv/bin/python -c "from gwsc_local_termux.database import init_db; init_db()"
+
+chmod 700 data logs backups 2>/dev/null || true
+chmod 600 cert.pem key.pem 2>/dev/null || true
 
 echo "=================================================="
-echo " Installation Complete!                          "
-echo " You can now start the server with: ./run.sh     "
+echo " Installation complete.                           "
+echo " Start:      ./run.sh                             "
+echo " Stop:       ./stop.sh                            "
+echo " Restart:    ./restart.sh                         "
+echo " Run tests:  .venv/bin/python -m pytest -q        "
 echo "=================================================="

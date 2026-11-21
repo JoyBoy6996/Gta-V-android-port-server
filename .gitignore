@@ -10,6 +10,11 @@ venv/
 **/venv
 ENV/
 
+# Environment files
+.env
+.env.*
+!.env.example
+
 # Logs and PIDs
 *.log
 logs/
@@ -17,11 +22,21 @@ server.pid
 
 # Database files
 *.db
+*.db-wal
+*.db-shm
 *.sqlite3
 data/
 
 # Backups
 backups/
+
+# Captures (may contain sanitized protocol fixtures only)
+captures/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
 
 # SSL Keys and Certs
 *.pem

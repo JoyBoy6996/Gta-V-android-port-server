@@ -1,74 +1,87 @@
-# GWSC Local Game Server (Termux Deployment Package)
+# GWSC Local Backend (Termux package)
 
-Complete, fully-functional local backend replacement for the Android GTA V / GWSC multiplayer port.
+This is the application package for the private GTA V Android backend. See
+the [repository README](../README.md) for the honest status table and the
+full documentation index.
 
-## Features
+> Private experiment for a modified client. Not affiliated with Rockstar
+> Games. Client compatibility is **unverified**.
 
-- **Full GWSC API Implementation**:
-  - `GET /gwsc/api/info` - Server diagnostic, online players count, registration status.
-  - `POST /gwsc/api/register` - User registration with password hashing & auto Rockstar ID generation.
-  - `POST /gwsc/api/login` - Authentication, token generation, and profile initialization.
-  - `POST /gwsc/api/logout`, `POST /gwsc/api/logout-all` - Token invalidation and session management.
-  - `GET /gwsc/api/me`, `PATCH /gwsc/api/me` - Profile retrieval and nickname updates.
-  - `POST /gwsc/api/me/password` - Password changing.
-  - `GET /gwsc/api/avatars/presets`, `POST /gwsc/api/me/avatar/preset` - Avatar preset colors.
-  - `GET /gwsc/api/users/{id}/profile` - Full public profiles, GTA Online character stats (rank, wallet, bank), achievements.
-  - `POST /gwsc/api/users/{id}/block`, `DELETE /gwsc/api/users/{id}/block` - User blocking/unblocking.
-  - `GET /gwsc/api/friends`, `POST /gwsc/api/friends` - Social friends system with request management.
-  - `POST /gwsc/api/friends/{id}/accept`, `DELETE /gwsc/api/friends/{id}` - Friend request acceptance and removal.
-  - `GET /gwsc/api/conversations`, `POST /gwsc/api/conversations` - Direct and group conversations.
-  - `GET /gwsc/api/conversations/{id}/messages`, `POST /gwsc/api/conversations/{id}/messages` - Message history and sending.
-  - `POST /gwsc/api/conversations/{id}/read` - Read status tracking.
-  - `DELETE /gwsc/api/conversations/{id}/members/{rockstarId}` - Group member removal.
-  - `GET /gwsc/api/sharkcards`, `POST /gwsc/api/sharkcards/{id}` - In-game bank funds crediting.
-  - `POST /gwsc/api/starterpack` - Criminal Enterprise Starter Pack ($1,000,000 bonus).
-  - `GET /gwsc/api/events` - Server-Sent Events (SSE) real-time push streaming.
+## Install and run
 
-- **Native ROS / RAGE Services**:
-  - Native `CreateTicket` XML handler returning valid session ticket and account metadata.
-  - `RosGamersSettings.json` config service.
-  - Presence commitment and matchmaking lobby session advertisement / discovery.
-
-- **Multiplayer Networking**:
-  - Asynchronous UDP Multiplayer Relay on port 6672 forwarding peer packets between clients.
-
-- **Storage & Security**:
-  - Persistent SQLite database at `data/gwsc.db`.
-  - Self-signed SSL certificate generator with Subject Alternative Names (SAN) for `127.0.0.1`, `localhost`, and LAN IPs.
-  - Automatic database backups at `backups/`.
-
----
-
-## Installation & Running on Termux
-
-### 1. Run Setup
-```sh
+```bash
 cd gwsc_local_termux
-./install.sh
-```
-
-### 2. Start the Server
-```sh
+./install.sh          # add --dev to install test dependencies
 ./run.sh
+curl -k https://127.0.0.1:8443/health
 ```
 
-### 3. Check Server Status
-```sh
-curl -k https://127.0.0.1:8443/
-curl -k https://127.0.0.1:8443/gwsc/api/info
+Stop/restart with `./stop.sh` / `./restart.sh`.
+
+## What is implemented
+
+- **GWSC REST/SSE** (`/gwsc/api/*`, also unprefixed):
+  - `register`, `login`, `logout`, `logout-all`
+  - `me`, nickname, password, avatar presets
+  - public profiles, block/unblock
+  - friends and requests
+  - direct/group conversations, messages, read state
+  - starter pack; shark-card claims disabled by default
+  - per-account SSE events
+- **Native ROS-style**: `CreateTicket`, `ros/ticket/renew`,
+  `ros/ticket/invalidate`, `RosGamersSettings.json`, `CommitPresence`,
+  `Presence`, matchmaking advertise/find/join/unadvertise.
+- **UDP relay**: authenticated registration, session isolation, rate limits.
+- **Operations**: SQLite migrations, online backup, health endpoint.
+
+## What is not verified
+
+- Login/profile response shapes accepted by the Android client.
+- Native XML task paths, namespaces and fields.
+- Matchmaking contract and real session discovery.
+- Gameplay transport over the relay.
+- Any end-to-end game login or session.
+
+Only a login **request** has been observed. Do not treat this package as a
+drop-in GTA Online server.
+
+## Layout
+
+| Path | Purpose |
+| --- | --- |
+| `server.py` | App assembly, middleware, lifespan. |
+| `config.py` | Environment configuration. |
+| `database.py` | Schema + forward migrations. |
+| `auth.py`, `security.py` | Tokens, passwords, rate limiting. |
+| `routes/` | Endpoint handlers. |
+| `multiplayer_relay.py` | UDP relay. |
+| `maintenance.py` | Periodic cleanup. |
+| `capture.py` | Development capture + redaction. |
+| `backup.py` | Backup/restore. |
+| `generate_certs.py` | Self-signed TLS with SANs. |
+| `data/`, `logs/`, `backups/` | Runtime state (gitignored). |
+
+## Backup and restore
+
+```bash
+.venv/bin/python -m gwsc_local_termux.backup
+.venv/bin/python -m gwsc_local_termux.backup restore backups/gwsc_backup_YYYYMMDD_HHMMSS.db
 ```
 
-### 4. Stop or Restart
-```sh
-./stop.sh
-./restart.sh
+Stop the server before restoring. See
+[`../docs/operations/backups.md`](../docs/operations/backups.md).
+
+## Tests
+
+```bash
+./install.sh --dev
+GWSC_SSL_ENABLED=false GWSC_RELAY_PORT=0 .venv/bin/python -m pytest -q
 ```
 
-### 5. Database Backup & Restore
-```sh
-# Create a backup
-python -m gwsc_local_termux.backup
+## More documentation
 
-# Restore from a backup
-python -m gwsc_local_termux.backup restore backups/gwsc_backup_YYYYMMDD_HHMMSS.db
-```
+- [Architecture](../docs/architecture.md)
+- [Environment variables](../docs/environment-variables.md)
+- [Protocol inventory](../docs/protocol/ANDROID_PROTOCOL_INVENTORY.md)
+- [Compatibility matrix](../docs/testing/compatibility-matrix.md)
+- [Troubleshooting](../docs/operations/troubleshooting.md)

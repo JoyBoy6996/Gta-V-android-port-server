@@ -4,10 +4,23 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn gwsc_local_termux.server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: GWSC_ENV
+        value: production
       - key: GWSC_SERVER_NAME
         value: Unknown Beaches Social Club
       - key: GWSC_REGISTRATION
         value: "true"
+      - key: GWSC_SSL_ENABLED
+        value: "false"
+      - key: GWSC_CAPTURE_ENABLED
+        value: "false"
+      - key: GWSC_DOCS_ENABLED
+        value: "false"
+      - key: GWSC_TRUST_PROXY
+        value: "true"
+      - key: GWSC_ALLOWED_ORIGINS
+        value: "*"
