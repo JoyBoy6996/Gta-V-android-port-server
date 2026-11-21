@@ -70,10 +70,40 @@ connectivity and routing, **not** successful authentication compatibility.
 | GET | `/gwsc/api/starterpack` | bearer | — | claim state | `UNVERIFIED` | — |
 | POST | `/gwsc/api/starterpack` | bearer | `Idempotency-Key?` | transaction result | `UNVERIFIED` | — |
 | GET | `/gwsc/api/events` | bearer or `?token=` | — | `text/event-stream` | `SOURCE_CONFIRMED` (SSE suspected) | `test_sse_requires_authentication` |
+| POST | `/gwsc/api/game-launch` | bearer (launcher token) | `buildReport` | `{ticket}` (43 URL-safe chars) | `SOURCE_CONFIRMED` (installed client) | `test_game_launch_returns_ticket_and_stores_only_its_hash` |
 
 All routes are also mounted without the `/gwsc/api` prefix for backward
 compatibility with the original prototype (for example `/login`,
 `/friends`). The prefix is the documented form.
+
+### Launcher game launch
+
+`SOURCE_CONFIRMED` — recovered from the installed client APK
+(`LauncherActivity.requestGameLaunch` and `LauncherActivity$98.done`):
+
+```http
+POST /gwsc/api/game-launch
+Authorization: Bearer <launcher token>
+Content-Type: application/json
+
+{"buildReport": "<opaque client integrity report>"}
+```
+
+```json
+{"ticket": "<43 URL-safe characters>"}
+```
+
+The client accepts the response only when the ticket matches
+`[A-Za-z0-9_-]{43}`; anything else is treated as a sign-in failure. The
+`buildReport` value is treated as opaque, required, and capped at 512
+characters.
+
+The ticket is a private, account-bound launch credential. It is stored only
+as a SHA-256 hash in `service_tickets` with `service = "game-launch"`, expires
+after `GWSC_TICKET_EXPIRY` seconds (default 3600), and is capped at
+`GWSC_MAX_LAUNCH_TICKETS_PER_ACCOUNT` (default 3) per account. The native
+layer may present it as `scAuthToken`; the REST API does not accept it as a
+launcher session.
 
 ### Relay registration (private extension)
 
@@ -113,6 +143,7 @@ Implemented native paths are documented in
 | Profile fields | `UNVERIFIED` | Public fields only; email only on `/me` |
 | SSE event names/payloads | `UNVERIFIED` | Per-account `message` and `friends` events |
 | CreateTicket XML | `UNVERIFIED` | Deterministic XML, no namespaces invented |
+| Launcher game-launch request/response | `SOURCE_CONFIRMED` | `{"buildReport": ...}` → `{"ticket": "<43 URL-safe chars>"}`; recovered from installed client code |
 | Matchmaking XML | `UNVERIFIED` | Private session advertisement |
 | Relay packet framing | `UNVERIFIED` | The relay forwards opaque datagrams; it does not parse game packets |
 

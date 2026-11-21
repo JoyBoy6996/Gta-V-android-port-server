@@ -17,6 +17,7 @@ from . import config, presence
 from .database import get_db
 from .errors import api_error
 from .security import generate_token, hash_token
+from .tickets import resolve_service_ticket
 from .time_utils import iso_after, is_expired, now_iso, parse_iso
 
 log = logging.getLogger("gwsc.auth")
@@ -249,6 +250,16 @@ def authenticate_native_request(
     authorization: Optional[str] = None,
     header_token: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Resolve a native ROS caller from any observed credential location."""
+    """Resolve a native ROS caller from any observed credential location.
+
+    Launcher bearer tokens are tried first.  The native game presents the
+    short-lived launch ticket as ``ScAuthToken``, so a valid service ticket is
+    accepted as a fallback.  Service tickets are deliberately *not* accepted
+    by :func:`get_current_session`, which keeps the REST API scoped to
+    launcher sessions.
+    """
     raw = form_token or query_token or header_token or extract_bearer(authorization)
-    return get_user_by_token(raw)
+    user = get_user_by_token(raw)
+    if user:
+        return user
+    return resolve_service_ticket(raw)

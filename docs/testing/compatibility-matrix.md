@@ -31,6 +31,8 @@ game session has been captured.
 | Conversations | Yes | `test_conversation_membership_is_enforced`, `test_group_member_removal_authorization` | `UNVERIFIED` | Direct + group; membership enforced. |
 | Messages | Yes | `test_message_validation_and_rate_limit` | `UNVERIFIED` | Validation, pagination, rate limit. |
 | SSE events | Yes | `test_sse_requires_authentication`, `test_event_bus_never_crosses_accounts` | `SOURCE_CONFIRMED` (SSE suspected) | Per-account only; event schema `UNVERIFIED`. |
+| Launcher game launch (`POST /gwsc/api/game-launch`) | Yes | `test_game_launch_returns_ticket_and_stores_only_its_hash`, `test_game_launch_validates_body`, `test_game_launch_requires_authentication` | `SOURCE_CONFIRMED` (installed client) | Request `{buildReport}`, response `{ticket}` matching `[A-Za-z0-9_-]{43}`. Ticket hashed at rest. |
+| Launch ticket as native `scAuthToken` | Yes | `test_launch_ticket_authenticates_native_requests_only`, `test_expired_and_revoked_launch_tickets_are_rejected` | `INFERRED` | Native `ScAuthToken` consumption is `UNVERIFIED`; REST sessions reject launch tickets. |
 | Shark cards | Yes, disabled by default | — | `UNVERIFIED` | Opt-in only; a request cannot prove purchase. |
 | Starter pack | Yes | — | `UNVERIFIED` | Atomic, one-time, ledgered. |
 | `CreateTicket` | Yes | `test_create_ticket_requires_authentication`, `test_create_ticket_is_bound_to_authenticated_account` | `UNVERIFIED` | Random private ticket, hashed at rest. |
@@ -52,6 +54,7 @@ game session has been captured.
 - Authorization: conversation membership, block relationships, session
   ownership, ticket ownership, group member removal.
 - Rate limiting and body limits.
+- Launch-ticket format, hashing at rest, expiry, revocation and per-service cap.
 - SSE isolation between accounts.
 - Relay registry isolation, size/rate drops and peer expiry.
 - Legacy database migration and token invalidation.

@@ -60,8 +60,9 @@ enabled. `*.pem` and `*.key` are gitignored.
 | --- | --- | --- |
 | `GWSC_PRESENCE_TIMEOUT` | `300` | Seconds before presence expires. |
 | `GWSC_PRESENCE_TOUCH_INTERVAL` | `30` | Minimum seconds between presence refreshes. |
-| `GWSC_TICKET_EXPIRY` | `3600` | Native ticket lifetime. |
-| `GWSC_MAX_TICKETS_PER_ACCOUNT` | `10` | Retained tickets per account. |
+| `GWSC_TICKET_EXPIRY` | `3600` | Native ticket lifetime. Also the launch-ticket lifetime. |
+| `GWSC_MAX_TICKETS_PER_ACCOUNT` | `10` | Retained ROS tickets per account (global native cap). |
+| `GWSC_MAX_LAUNCH_TICKETS_PER_ACCOUNT` | `3` | Retained `game-launch` tickets per account; capped per service so launches cannot evict ROS tickets. |
 | `GWSC_SESSION_TIMEOUT` | `300` | Matchmaking session heartbeat timeout. |
 | `GWSC_MAX_SESSIONS_PER_HOST` | `5` | Active sessions per host account. |
 | `GWSC_MAX_SESSION_PLAYERS` | `30` | Maximum players per session. |
@@ -109,6 +110,8 @@ enabled. `*.pem` and `*.key` are gitignored.
 | `GWSC_MESSAGE_RATE_WINDOW` | `60` | Message window in seconds. |
 | `GWSC_SESSION_RATE_LIMIT` | `10` | Session operations per window. |
 | `GWSC_SESSION_RATE_WINDOW` | `60` | Session window in seconds. |
+| `GWSC_GAME_LAUNCH_RATE_LIMIT` | `10` | Game-launch ticket requests per window (per IP and account). |
+| `GWSC_GAME_LAUNCH_RATE_WINDOW` | `60` | Game-launch window in seconds. |
 | `GWSC_RELAY_REGISTER_RATE_LIMIT` | `20` | Relay registrations per window. |
 | `GWSC_RELAY_REGISTER_RATE_WINDOW` | `60` | Relay registration window. |
 

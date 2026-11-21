@@ -46,6 +46,20 @@ Native handlers accept a GWSC token from any of:
 
 There is **no fallback to the latest online user** and no default account.
 
+### Launcher launch tickets
+
+The launcher calls `POST /gwsc/api/game-launch` with its bearer token and
+receives `{"ticket": "<43 URL-safe characters>"}` (`SOURCE_CONFIRMED` from
+the installed client). The ticket is account-bound and stored only as a hash
+with `service = "game-launch"`.
+
+Native handlers accept a launch ticket through the same credential fields
+above, so the game can present it as `scAuthToken`. It expires with
+`GWSC_TICKET_EXPIRY` (default 3600 s) and is capped at
+`GWSC_MAX_LAUNCH_TICKETS_PER_ACCOUNT` (default 3) per account. It is **not**
+accepted as a launcher REST session token. Whether the native layer actually
+presents it this way is `UNVERIFIED` until captured.
+
 ## Ticket lifecycle
 
 ### `CreateTicket`
@@ -67,7 +81,9 @@ Each ticket is bound to:
 - title/platform metadata;
 - an issue time and expiry (`GWSC_TICKET_EXPIRY`, default 3600 s).
 
-At most `GWSC_MAX_TICKETS_PER_ACCOUNT` tickets are retained per account.
+At most `GWSC_MAX_TICKETS_PER_ACCOUNT` ROS tickets are retained per account.
+Launch tickets are capped separately per service (see above), so a burst of
+launches cannot evict an in-use ROS ticket.
 
 Success body:
 

@@ -26,6 +26,7 @@ with Python and FastAPI. It runs on Android/Termux, in Docker, or on a VPS.
 | SSE events (per account) | Implemented + tested | SSE suspected `SOURCE_CONFIRMED` |
 | Economy (starter pack, shark cards) | Implemented; shark cards off by default | `UNVERIFIED` |
 | Native tickets (`CreateTicket`, renew, invalidate) | Implemented + tested | `UNVERIFIED` XML |
+| Launcher game launch (`POST /gwsc/api/game-launch`) | Implemented + tested | Contract `SOURCE_CONFIRMED`; native `scAuthToken` use `INFERRED` |
 | Presence | Implemented + tested | `UNVERIFIED` |
 | Matchmaking advertise/find/join | Implemented + tested | `INFERRED` / `UNVERIFIED` |
 | UDP relay (registration + forwarding) | Implemented + tested in isolation | `INFERRED` / `UNVERIFIED` |
@@ -45,6 +46,7 @@ isolation, limits), not client compatibility. Details:
   - users: public profile, block/unblock
   - social: friends, requests, accept/reject/remove
   - chat: direct/group conversations, messages, read state, SSE events
+  - launch: short-lived `game-launch` ticket for the installed client
   - economy: starter pack, optional shark-card claims (development only)
 - **Native ROS-style services**: `CreateTicket`, ticket renew/invalidate,
   `RosGamersSettings.json`, presence, matchmaking.

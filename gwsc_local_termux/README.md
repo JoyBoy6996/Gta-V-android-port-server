@@ -26,6 +26,7 @@ Stop/restart with `./stop.sh` / `./restart.sh`.
   - public profiles, block/unblock
   - friends and requests
   - direct/group conversations, messages, read state
+  - `game-launch` ticket for the installed launcher
   - starter pack; shark-card claims disabled by default
   - per-account SSE events
 - **Native ROS-style**: `CreateTicket`, `ros/ticket/renew`,

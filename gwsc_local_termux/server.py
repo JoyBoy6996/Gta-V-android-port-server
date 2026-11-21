@@ -178,6 +178,7 @@ async def health():
 from .routes.auth import router as auth_router  # noqa: E402
 from .routes.events import router as events_router  # noqa: E402
 from .routes.friends import router as friends_router  # noqa: E402
+from .routes.game_launch import router as game_launch_router  # noqa: E402
 from .routes.info import router as info_router  # noqa: E402
 from .routes.messages import router as messages_router  # noqa: E402
 from .routes.profile import router as profile_router  # noqa: E402
@@ -193,6 +194,7 @@ app.include_router(messages_router)
 app.include_router(sharkcards_router)
 app.include_router(events_router)
 app.include_router(relay_router)
+app.include_router(game_launch_router)
 app.include_router(ros_router)
 
 
