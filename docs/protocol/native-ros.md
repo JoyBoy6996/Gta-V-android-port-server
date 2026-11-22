@@ -182,6 +182,20 @@ Invalid configuration fails at server startup. The XML shape, validation and
 route wiring are covered by `tests/test_native_service_hosts.py` (`TESTED`);
 that the redirect is honoured during a real game launch remains `UNVERIFIED`.
 
+### Deployment blocker (`TESTED`)
+
+The launcher's compiled `SERVER_HOST` is
+`roscaelifer.thevakhovske.eu.org`. Probing that host with an invalid token
+returned Express 404 (`Cannot POST ...`) for `/auth.asmx/CreateTicketScAuthToken`,
+`/gta5/11/gameservices/auth.asmx/CreateTicketScAuthToken` and
+`/gwsc/api/events`, with `server: Caddy` / `x-powered-by: Express`. It does not
+proxy this FastAPI backend, so native calls sent to the launcher-selected host
+can never reach these routes. Repointing the game requires changing the
+launcher's `-rosHost=` argument (or its `server` preference), which is outside
+backend scope; `GTAVNativeActivity` is not exported, so an external direct
+launch is also denied by Android. Until that is changed, the ban screen and
+matchmaking behaviour cannot be verified against this server (`UNVERIFIED`).
+
 The ticket and session ticket are random private values, stored only as SHA-256
 hashes in `service_tickets` and bound to the authenticated account, service,
 title and platform. They use `GWSC_TICKET_EXPIRY` (default 3600 s). Each service
