@@ -31,7 +31,7 @@ with Python and FastAPI. It runs on Android/Termux, in Docker, or on a VPS.
 | Native tickets (`CreateTicket`, renew, invalidate) | Implemented + tested | XML/ban flag `SOURCE_CONFIRMED` + `TESTED`; end-to-end `UNVERIFIED` |
 | Launcher game launch (`POST /gwsc/api/game-launch`) | Implemented + tested | Contract + native token plumbing `SOURCE_CONFIRMED`; end-to-end `UNVERIFIED` |
 | Presence | Implemented + tested | `UNVERIFIED` |
-| Matchmaking advertise/find/join | Implemented + tested | `INFERRED` / `UNVERIFIED` |
+| Matchmaking advertise/find/join | Private endpoints implemented + tested; native `.asmx` not wired | Native paths/fields `SOURCE_CONFIRMED`; join blocked by opaque `Data` |
 | UDP relay (registration + forwarding) | Implemented + tested in isolation | `INFERRED` / `UNVERIFIED` |
 | Two-device gameplay over the relay | **Not verified** | Unknown |
 | Android client end-to-end login/session | **Not verified** | Unknown |

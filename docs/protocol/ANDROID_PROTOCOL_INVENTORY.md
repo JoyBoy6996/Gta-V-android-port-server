@@ -146,7 +146,8 @@ Implemented native paths are documented in
 | Native `.asmx` method paths | `SOURCE_CONFIRMED` + `TESTED` | `auth.asmx` / `socialclub.asmx` ticket and SC-token methods from `GetServicePath` format and create-ticket task |
 | Privilege-7 banned flag | `SOURCE_CONFIRMED` + `TESTED` | `HasRosPrivilege(7)` maps to `ACCESS_DENIED_BANNED`; server credentials never grant it |
 | Launcher game-launch request/response | `SOURCE_CONFIRMED` | `{"buildReport": ...}` → `{"ticket": "<43 URL-safe chars>"}`; recovered from installed client code |
-| Matchmaking XML | `UNVERIFIED` | Private session advertisement |
+| Native `matchmaking.asmx` method paths + request fields | `SOURCE_CONFIRMED` | Recovered from `GetServiceMethod()` and task request builders; not implemented by this server |
+| Matchmaking `Find` `Data` record | `UNVERIFIED` | Base64-wrapped serialized `netPeerAddress` + 64-bit fields; cannot be fabricated safely |
 | Relay packet framing | `UNVERIFIED` | The relay forwards opaque datagrams; it does not parse game packets |
 
 ## Open questions
@@ -158,7 +159,7 @@ Implemented native paths are documented in
 5. Does the client use SSE, polling, or both?
 6. What exact XML namespaces/root elements do native tasks expect? (Field names are `SOURCE_CONFIRMED`; namespaces are not.)
 7. In what order are the native `.asmx` calls made after launch, and which one first consumes the launch ticket?
-8. What is the real matchmaking task path and field set?
+8. Can the server construct the serialized `Find` `Data` record accepted by the game?
 9. What UDP registration handshake, if any, does the game use?
 10. Does the client expect a particular Rockstar ID format beyond a positive integer?
 

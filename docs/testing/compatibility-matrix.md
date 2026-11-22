@@ -42,7 +42,8 @@ game session has been captured.
 | Ticket renew/invalidate | Yes | `test_ticket_renew_invalidate_and_ownership` | `UNVERIFIED` | Ownership enforced; renewed XML now uses the parser-valid shape. |
 | `RosGamersSettings.json` | Yes | — | `UNVERIFIED` | Placeholder document. |
 | `CommitPresence` / `Presence` | Yes | `test_commit_presence_requires_auth_and_updates_info` | `UNVERIFIED` | Real presence count. |
-| Matchmaking advertise/find/join/unadvertise | Yes | `test_matchmaking_advertise_find_join_unadvertise` | `UNVERIFIED` / `INFERRED` | Paths/fields unconfirmed. |
+| Matchmaking advertise/find/join/unadvertise (private endpoints) | Yes | `test_matchmaking_advertise_find_join_unadvertise` | `UNVERIFIED` / `INFERRED` | Prototype paths/fields, not the native `.asmx` contract. |
+| Native `matchmaking.asmx` methods | No | — | Paths/fields `SOURCE_CONFIRMED`; `Find` data `UNVERIFIED` | Server does not implement them; `Find` requires an opaque serialized session record. |
 | Unknown native paths | 404 | `test_unknown_native_route_is_not_a_generic_success` | `TESTED` | No catch-all success. |
 | UDP relay registration | Yes | `test_relay_registration_requires_session_membership` | `INFERRED` | Private extension; client handshake unknown. |
 | UDP relay forwarding | Yes | `test_registry_routes_only_within_session`, `test_unregistered_and_oversized_packets_are_dropped`, `test_registry_expires_stale_peers` | `UNVERIFIED` | Opaque datagrams; no game protocol. |

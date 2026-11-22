@@ -43,7 +43,9 @@ Stop/restart with `./stop.sh` / `./restart.sh`.
 - The exact native call order after launch, XML namespaces and any intermediate
   token exchange. (The `.asmx` method names and `CreateTicket` field names are
   `SOURCE_CONFIRMED` from static inspection; the full sequence is not.)
-- Matchmaking contract and real session discovery.
+- Matchmaking `Find` response compatibility. The native `matchmaking.asmx`
+  paths/request fields are `SOURCE_CONFIRMED`, but the base64 `Data` record is
+  an opaque serialized session structure and is `UNVERIFIED`.
 - Gameplay transport over the relay.
 - Any end-to-end game login or session.
 

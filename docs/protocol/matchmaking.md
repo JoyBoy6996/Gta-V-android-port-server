@@ -1,9 +1,59 @@
 # Matchmaking Contract
 
-**Status:** `UNVERIFIED` / `INFERRED`. The Android client's real
-matchmaking task paths and field names have not been captured. The handlers
-below preserve the original prototype's path shapes but enforce
-authentication, ownership and capacity.
+**Status:** `UNVERIFIED` / `INFERRED` for the private server endpoints below.
+The native `.asmx` paths and request fields in the first section are
+`SOURCE_CONFIRMED` by static inspection of `analysis/lib/arm64-v8a/libgtav.so`,
+but the server does **not** implement them yet. Do not treat the prototype
+handlers in this document as compatible with the installed game.
+
+## Native client findings
+
+`rlScMatchmaking*Task::GetServiceMethod()` returns these literal strings
+(`SOURCE_CONFIRMED`):
+
+```text
+matchmaking.asmx/Advertise
+matchmaking.asmx/Update
+matchmaking.asmx/Find
+matchmaking.asmx/Unadvertise
+matchmaking.asmx/UnadvertiseAll
+```
+
+`rlRosHttpTask::GetServiceSet()` selects `gameservices` (in-game) or
+`launcherservices` (launcher flag). The full in-game path is therefore
+expected to be
+`/{title}/{version}/gameservices/matchmaking.asmx/<Method>` (`INFERRED`: the
+selector is confirmed, which flag matchmaking uses is not).
+
+Request form fields recovered from the task `Configure`/`OnUpdate` code
+(`SOURCE_CONFIRMED`):
+
+| Method | Fields |
+| --- | --- |
+| `Advertise` | `ticket`, `numSlots`, `availableSlots`, `attrsJson` |
+| `Update` | `ticket`, `matchId`, `numSlots`, `availableSlots`, `attrsJson` |
+| `Find` | `ticket`, `availableSlots`, `filterName`, `filterParamsJson`, `maxResults` |
+| `Unadvertise` | `ticket`, `matchId` |
+| `UnadvertiseAll` | `UNVERIFIED` (no out-of-line request builder was found) |
+
+The base ROS task also posts the account credential as `scAuthToken`
+(`SOURCE_CONFIRMED` for the create-ticket task; the matchmaking base path is
+`INFERRED`).
+
+Response observations (`SOURCE_CONFIRMED`):
+
+- `Advertise` parses `<Result><MatchId>...` and formats the value as a GUID:
+  `%08lx-%04hx-%04hx-%02hx%02hx-%02hx%02hx%02hx%02hx%02hx%02hx`.
+- `Find` parses `<Result><Results><R><Data>BASE64...</Data></R></Results>`.
+  `Data` is base64-decoded and then read as serialized `netPeerAddress` plus
+  64-bit fields into a 112-byte result record. A fabricated or empty value
+  would not be a real session. **This is the current blocker for making
+  friends see/join a host.**
+- `Update`/`Unadvertise` `ProcessSuccess` functions contain no additional
+  response field names; a status-only response is `INFERRED`.
+
+The server's existing private matchmaking endpoints below are not wired to
+these native methods and do not emit the serialized `Data` record.
 
 ## Session model
 
@@ -130,9 +180,12 @@ relay registry drops the session.
 
 ## Open questions
 
-1. What are the real task paths and XML namespaces?
+1. Are the native matchmaking requests sent to `gameservices` or
+   `launcherservices`, and what exact namespaces does the response use?
 2. Does the client use `GetPresenceServerInfo` to discover a host/port?
-3. Does the client expect a session list, a single session, or a lobby ID?
-4. Are sessions advertised with a public IP supplied by the client?
+3. What is the exact binary layout of `Find`'s base64 `Data` record, and can
+   the server construct one that the game accepts? (`UNVERIFIED`, blocking)
+4. Are sessions advertised with a public IP supplied by the client inside
+   `attrsJson`?
 5. How are private/friends-only sessions invited?
 6. What heartbeat cadence does the client use?
