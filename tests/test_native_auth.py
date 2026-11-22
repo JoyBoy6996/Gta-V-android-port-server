@@ -163,6 +163,54 @@ def test_sc_auth_token_is_real_and_resolvable(client, make_account, path):
     assert row["service"].endswith("/" + path.rsplit("/", 1)[-1])
 
 
+def test_session_ticket_header_is_a_native_credential(client, make_account):
+    account = make_account(email="sessionauth@example.invalid", nickname="sessionauth")
+    launch_ticket = _launch_ticket(client, account)
+    ticket_response = client.post(
+        TICKET_PATH,
+        data={"platformName": "pcros", "scAuthToken": launch_ticket},
+    )
+    assert ticket_response.status_code == 200, ticket_response.text
+    session_ticket = _root(ticket_response).findtext("./Result/SessionTicket")
+    assert session_ticket
+
+    # LSO-style post-auth calls carry SessionTicket in ros-SessionTicket rather
+    # than repeating the original launch ticket as scAuthToken.
+    presence = client.post("/Presence", headers={"ros-SessionTicket": session_ticket})
+    assert presence.status_code == 200, presence.text
+    assert _root(presence).findtext("./Status") == "1"
+
+    sc_response = client.post(
+        "/gta5/11/gameservices/auth.asmx/CreateScAuthToken",
+        headers={"ros-SessionTicket": session_ticket},
+        data={"platformName": "pcros"},
+    )
+    assert sc_response.status_code == 200, sc_response.text
+    root = _root(sc_response)
+    token = root.findtext("./Result")
+    assert token and root.get("ScAuthToken") == token
+
+
+def test_legacy_ticket_field_cannot_authenticate_account_only_route(client, make_account):
+    account = make_account(email="legacyfield@example.invalid", nickname="legacyfield")
+    launch_ticket = _launch_ticket(client, account)
+    ticket_response = client.post(
+        TICKET_PATH,
+        data={"platformName": "pcros", "scAuthToken": launch_ticket},
+    )
+    assert ticket_response.status_code == 200, ticket_response.text
+    session_ticket = _root(ticket_response).findtext("./Result/SessionTicket")
+    assert session_ticket
+
+    # ``ticket`` is a native credential but also the target of these legacy
+    # account routes.  Supplying it alone must not satisfy their auth check.
+    response = client.post(
+        "/ros/ticket/invalidate", data={"ticket": session_ticket}
+    )
+    assert response.status_code == 401
+    assert _root(response).findtext("./Status") == "0"
+
+
 def test_unknown_native_asmx_method_is_not_a_success(client, make_account):
     account = make_account(email="unknownasmx@example.invalid", nickname="unknownasmx")
     response = client.post(

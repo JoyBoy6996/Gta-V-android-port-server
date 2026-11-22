@@ -3,9 +3,14 @@
 **Every contract in this document is `UNVERIFIED` unless explicitly marked
 otherwise.** The XML field names, `.asmx` method names and ban flag below are
 `SOURCE_CONFIRMED` by static inspection of the installed client
-(`analysis/lib/arm64-v8a/libgtav.so` and the launcher DEX). Automated coverage
-is `TESTED`. No complete post-launch traffic capture exists, so the exact
-request order and any matchmaking/session calls remain `UNVERIFIED`.
+(`analysis/lib/arm64-v8a/libgtav.so` and the launcher DEX). The matchmaking,
+P2P certificate and relay shapes are `SOURCE_CONFIRMED` from Los Santos
+Online's PS4 server source, not from an Android capture. Automated coverage is
+`TESTED`. No complete post-launch traffic capture exists, so the exact request
+order and Android acceptance of those response shapes remain `UNVERIFIED`.
+
+See [PS4 server vs private Android backend](ps4-server-comparison.md) for the
+LSO comparison and the current launcher-to-native sign-in gap.
 
 ## XML layer
 
@@ -41,10 +46,18 @@ Namespaces are deliberately omitted because none have been observed.
 
 Native handlers accept a GWSC token from any of:
 
-- form field `scAuthToken`, `authToken` or `token`;
+- form field `scAuthToken`, `authToken`, `token` or `ticket`;
+- form field `sessionTicket` / `SessionTicket`;
 - query parameter `scAuthToken` or `token`;
 - `Authorization: Bearer ...`;
-- `X-GWSC-Token` header.
+- `X-GWSC-Token` header;
+- `ros-SessionTicket`, `ros-Session-Ticket` or `x-ros-sessionticket` header.
+
+`ticket` is `SOURCE_CONFIRMED` for LSO's native matchmaking, P2P and many
+Social Club calls. It is deliberately **not** accepted by the legacy
+`/ros/ticket/renew` and `/ros/ticket/invalidate` account routes, where the same
+field names the ticket being operated on. `SessionTicket` headers follow LSO's
+post-auth convention; the exact Android header spelling is `UNVERIFIED`.
 
 There is **no fallback to the latest online user** and no default account.
 
@@ -64,6 +77,16 @@ launch ticket through the credential fields above. It expires with
 accepted as a launcher REST session token. The first native request after game
 start, and whether any intermediate token exchange occurs, remain
 `UNVERIFIED`.
+
+### `SessionTicket` credentials (`TESTED`)
+
+`CreateTicket` returns a second private `SessionTicket` alongside `Ticket`
+(`SOURCE_CONFIRMED` from the native parser). LSO uses it for post-auth calls;
+this backend accepts it from `ros-SessionTicket` headers and from the
+`sessionTicket` form field. It resolves through the same hashed,
+account-bound ticket store as launch tickets and never becomes a launcher REST
+session. `tests/test_native_auth.py` covers the header path
+(`TESTED`).
 
 ## Native ban check (`SOURCE_CONFIRMED`, `TESTED`)
 
@@ -182,19 +205,24 @@ Invalid configuration fails at server startup. The XML shape, validation and
 route wiring are covered by `tests/test_native_service_hosts.py` (`TESTED`);
 that the redirect is honoured during a real game launch remains `UNVERIFIED`.
 
-### Deployment blocker (`TESTED`)
+### Deployment host check (`TESTED`)
 
-The launcher's compiled `SERVER_HOST` is
+The unpatched launcher's compiled `SERVER_HOST` is
 `roscaelifer.thevakhovske.eu.org`. Probing that host with an invalid token
 returned Express 404 (`Cannot POST ...`) for `/auth.asmx/CreateTicketScAuthToken`,
 `/gta5/11/gameservices/auth.asmx/CreateTicketScAuthToken` and
 `/gwsc/api/events`, with `server: Caddy` / `x-powered-by: Express`. It does not
-proxy this FastAPI backend, so native calls sent to the launcher-selected host
-can never reach these routes. Repointing the game requires changing the
-launcher's `-rosHost=` argument (or its `server` preference), which is outside
-backend scope; `GTAVNativeActivity` is not exported, so an external direct
-launch is also denied by Android. Until that is changed, the ban screen and
-matchmaking behaviour cannot be verified against this server (`UNVERIFIED`).
+proxy this FastAPI backend.
+
+The patched launcher v2 bundled in `assets/gwsc.properties` sets
+`SERVER_HOST=127.0.0.1:8443`, `WEB_URL=https://127.0.0.1:8443/` and
+`SELF_SIGNED_CERT=1` (`SOURCE_CONFIRMED`). A temporary local backend on that
+origin answered `/health` and `/gwsc/api/game-launch` (`TESTED`), but the game
+still showed the Online login prompt on the user's attempt. That symptom is
+`UNVERIFIED` at the protocol level: no native request log or redacted FastAPI
+access log was captured. The next diagnostic is to confirm whether any native
+`.asmx` request reaches this backend after the handoff. `GTAVNativeActivity` is
+not exported, so an external direct launch is denied by Android.
 
 The ticket and session ticket are random private values, stored only as SHA-256
 hashes in `service_tickets` and bound to the authenticated account, service,
@@ -234,11 +262,11 @@ cannot be renewed. Another account cannot invalidate someone else's ticket.
 ## SC auth token response (`SOURCE_CONFIRMED`, `TESTED`)
 
 `rlScCreateScAuthTokenTask::ProcessSuccess` reads the text of the `<Result>`
-element. The server returns a real, account-bound, hashed-at-rest service
-token:
+element. LSO also repeats the token in a `ScAuthToken` attribute on `Response`;
+the server now emits both shapes (`SOURCE_CONFIRMED`, `TESTED`):
 
 ```xml
-<Response>
+<Response ScAuthToken="gwsc_ticket_...">
   <Status>1</Status>
   <Result>gwsc_ticket_...</Result>
 </Response>
@@ -246,6 +274,81 @@ token:
 
 It resolves through the same native authentication fallback as launch tickets,
 but is not accepted by launcher REST sessions.
+
+## Native matchmaking (`SOURCE_CONFIRMED` LSO shape, `TESTED`)
+
+The following literal methods are registered with the same prefixed and
+unprefixed forms as other native services:
+
+```text
+/{title}/{version}/gameservices/matchmaking.asmx/Advertise
+/{title}/{version}/gameservices/matchmaking.asmx/Update
+/{title}/{version}/gameservices/matchmaking.asmx/Find
+/{title}/{version}/gameservices/matchmaking.asmx/Unadvertise
+/{title}/{version}/gameservices/matchmaking.asmx/UnadvertiseAll
+```
+
+Requests are authenticated with `ticket`, `scAuthToken`, `SessionTicket` or the
+observed header variants. `attrsJson` must be a JSON object; its `Data` member
+is the client's opaque base64 peer record. The server stores that string
+verbatim in `game_sessions.advertised_data` and returns it unchanged from
+`Find` as `<R MatchId="..." Owner="..."><Data>...</Data></R>` inside a
+`DynamicResponse` envelope. It never fabricates a `netPeerAddress` record.
+`AvailableSlots`, `numSlots`, platform and expiry are validated and stored so
+filtering is real rather than a catch-all success handler.
+
+Advertisements expire after `GWSC_NATIVE_MATCHMAKING_SESSION_SECONDS` (default
+8 hours, following LSO). `Unadvertise` is host-only and idempotent for unknown
+match IDs. `tests/test_native_matchmaking.py` covers advertise/Find echo,
+Update, Unadvertise, UnadvertiseAll, bad JSON and unauthenticated calls
+(`TESTED`). Whether the installed Android client accepts the echoed `Data`
+remains `UNVERIFIED`.
+
+## P2P certificates (`SOURCE_CONFIRMED` LSO shape, `TESTED`)
+
+`POST /{title}/{version}/{serviceSet}/auth.asmx/CreateP2PCertificate` accepts
+authenticated `pubKey` and `sig` fields. `pubKey` must be base64 for a 65-byte
+uncompressed P-256 point; `sig` is required, bounded and base64-valid but not
+cryptographically verified because the Android meaning is `UNVERIFIED`.
+
+`gwsc_local_termux/native_crypto.py` generates a static local P2P CA on first
+use and issues a client certificate with OpenSSL `-force_pubkey`, so the issued
+certificate contains the client's key, not a server-generated one. Private
+keys are written with mode `0600` and never logged. The response contains the
+client certificate followed by the CA certificate in `CertChain`, and
+`SecsUntilExpiration` from `GWSC_P2P_CERT_TTL` (default 86400).
+
+Paths can be overridden with `GWSC_P2P_CA_KEY`, `GWSC_P2P_CA_CERT` and
+`GWSC_P2P_CERT_DIR`. Rotating the CA requires a coordinated client update;
+partial key/cert pairs fail closed. `tests/test_native_crypto.py` and
+`tests/test_native_p2p_relay.py` verify the CA signature, client public key and
+response shape (`TESTED`).
+
+## Relay discovery (`SOURCE_CONFIRMED` LSO shape, `TESTED`)
+
+`POST /{title}/{version}/{serviceSet}/GeoLocation.asmx/GetRelayServers` (and
+the `GetLocationInfoFromIP` alias) requires native authentication and a
+configured public UDP relay:
+
+```sh
+GWSC_RELAY_PUBLIC_ADDRESS=your.public.host
+GWSC_RELAY_PUBLIC_PORT=6672
+```
+
+The endpoint returns LSO's `RegionBucketLookUpResponse` shape with a P-256 SPKI
+public key on `RelaysList` and a raw `r||s` ECDSA-SHA256 signature over the
+literal `host:port` string on `Server/@Sig`. The relay signing key is generated
+once under `GWSC_RELAY_CERT_DIR`, stored with mode `0600`, and is independent of
+the TLS certificate and P2P CA. Unconfigured public address or missing OpenSSL
+returns XML errors rather than an unsigned relay list. Signature verification
+is covered by `tests/test_native_crypto.py` and the endpoint by
+`tests/test_native_p2p_relay.py` (`TESTED`). Android acceptance is
+`UNVERIFIED`.
+
+`POST /{title}/{version}/{serviceSet}/Presence.asmx/GetPresenceServers` returns
+LSO's `GetPresenceServersResponse` shape and reuses the same configured public
+relay host. It is authenticated and returns 503 when no public relay is
+configured (`TESTED`).
 
 ## Presence
 

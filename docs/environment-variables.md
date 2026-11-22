@@ -18,6 +18,8 @@ Copy [`.env.example`](../.env.example) as a starting point. Never commit
 | `GWSC_PORT` | `8443` | HTTP(S) port. `PORT` (Render/PaaS) overrides it. |
 | `GWSC_RELAY_HOST` | `0.0.0.0` | UDP bind address. |
 | `GWSC_RELAY_PORT` | `6672` | UDP relay port. `0` disables the listener (tests). |
+| `GWSC_RELAY_PUBLIC_ADDRESS` | *(empty)* | Public address advertised by `GetRelayServers`. Required for relay discovery; empty returns an XML error. |
+| `GWSC_RELAY_PUBLIC_PORT` | `GWSC_RELAY_PORT` | Public UDP port advertised by `GetRelayServers`. May differ from the bind port behind NAT. |
 | `GWSC_PUBLIC_HOST` | *(empty)* | Public host advertised to matchmaking. Empty uses the caller's address. |
 
 ## TLS
@@ -69,6 +71,11 @@ enabled. `*.pem` and `*.key` are gitignored.
 | `GWSC_MAX_SESSIONS_PER_HOST` | `5` | Active sessions per host account. |
 | `GWSC_MAX_SESSION_PLAYERS` | `30` | Maximum players per session. |
 | `GWSC_MATCHMAKING_RESULT_LIMIT` | `20` | Default/max find results (max 50). |
+| `GWSC_NATIVE_MATCHMAKING_SESSION_SECONDS` | `28800` | Native `.asmx` advertisement lifetime (8 hours). |
+| `GWSC_P2P_CERT_TTL` | `86400` | Issued P2P certificate lifetime in seconds. |
+| `GWSC_P2P_CERT_DIR` | `<DATA_DIR>/certs/p2p` | Default directory for static P2P CA files. |
+| `GWSC_P2P_CA_KEY` | `<P2P_CERT_DIR>/ca-key.pem` | Static P2P CA private key (0600). Rotate only with a client update. |
+| `GWSC_P2P_CA_CERT` | `<P2P_CERT_DIR>/ca-cert.pem` | Static P2P CA certificate returned in `CertChain`. |
 
 ## Social
 
@@ -90,6 +97,11 @@ enabled. `*.pem` and `*.key` are gitignored.
 | `GWSC_RELAY_RATE_PPS` | `200` | Per-peer token refill rate. |
 | `GWSC_RELAY_RATE_BURST` | `400` | Per-peer burst size. |
 | `GWSC_RELAY_MAX_PEERS_PER_SESSION` | `32` | Session relay capacity. |
+| `GWSC_RELAY_CERT_DIR` | `<DATA_DIR>/certs/relay` | Default directory for relay signing material. |
+| `GWSC_RELAY_SIGNING_KEY` | `<RELAY_CERT_DIR>/relay_private_key.pem` | P-256 relay signing key (0600). May rotate independently. |
+| `GWSC_RELAY_PUBLIC_KEY_DER` | `<RELAY_CERT_DIR>/relay_public_key.der` | SPKI DER public key. |
+| `GWSC_RELAY_PUBLIC_KEY_PEM` | `<RELAY_CERT_DIR>/relay_public_key.pem` | SPKI PEM public key used for local verification. |
+| `GWSC_RELAY_PUBLIC_KEY_TXT` | `<RELAY_CERT_DIR>/relay_public_key.txt` | Base64 SPKI key emitted by `GetRelayServers`. |
 
 ## Economy
 

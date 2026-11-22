@@ -91,6 +91,144 @@ def response_xml(
     return _serialise(root)
 
 
+def dynamic_results_xml(rows: Iterable[ET.Element], *, status: int = 1) -> str:
+    """Build LSO-shaped ``DynamicResponse`` matchmaking results.
+
+    The ``R/MatchId``, ``R/Owner`` and opaque ``R/Data`` shape is taken from
+    Los Santos Online's ``find.js``.  ``Data`` is always supplied by the
+    advertising client; this function never constructs it.
+    """
+    rows = list(rows)
+    root = _element(
+        "Response",
+        attributes={
+            "xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
+            "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xmlns": "DynamicResponse",
+        },
+        children=[
+            _element("Status", str(status)),
+            _element(
+                "Results",
+                attributes={"Count": str(len(rows))},
+                children=rows,
+            ),
+        ],
+    )
+    return _serialise(root)
+
+
+def dynamic_status_xml(*, match_id: Optional[str] = None, status: int = 1) -> str:
+    """Build the status-only LSO matchmaking response, optionally with MatchId."""
+    children = [_element("Status", str(status))]
+    if match_id:
+        children.append(_element("MatchId", match_id))
+    root = _element(
+        "Response",
+        attributes={
+            "xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
+            "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xmlns": "DynamicResponse",
+        },
+        children=children,
+    )
+    return _serialise(root)
+
+
+def p2p_certificate_xml(*, cert_chain: str, seconds_until_expiration: int) -> str:
+    """Build the LSO-shaped P2P certificate-chain response."""
+    root = _element(
+        "Response",
+        children=[
+            _element("Status", "1"),
+            _element("CertChain", cert_chain.strip()),
+            _element("SecsUntilExpiration", str(seconds_until_expiration)),
+        ],
+    )
+    return _serialise(root)
+
+
+def relay_servers_xml(*, host: str, public_key: str, signature: str) -> str:
+    """Build the LSO-shaped signed relay-discovery response.
+
+    The element names and attributes are ``SOURCE_CONFIRMED`` from Los Santos
+    Online's ``getRelayServers.js``.  Android acceptance remains `UNVERIFIED`.
+    """
+    root = _element(
+        "Response",
+        attributes={
+            "xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
+            "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xmlns": "RegionBucketLookUpResponse",
+        },
+        children=[
+            _element("Status", "1"),
+            _element(
+                "LocInfo",
+                attributes={
+                    "RegionCode": "5",
+                    "Longitude": "144.3436",
+                    "Latitude": "-38.1801",
+                    "CountryCode": "AU",
+                },
+            ),
+            _element(
+                "RelaysList",
+                attributes={
+                    "Count": "1",
+                    "IsSecure": "false",
+                    "PublicKey": public_key,
+                },
+                children=[
+                    _element(
+                        "Server",
+                        attributes={
+                            "Host": host,
+                            "IsXblSg": "false",
+                            "Sig": signature,
+                        },
+                    )
+                ],
+            ),
+        ],
+    )
+    return _serialise(root)
+
+
+def presence_servers_xml(*, host: str) -> str:
+    """Build the LSO-shaped ``GetPresenceServers`` response."""
+    root = _element(
+        "Response",
+        attributes={
+            "xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
+            "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xmlns": "GetPresenceServersResponse",
+        },
+        children=[
+            _element("Status", "1"),
+            _element(
+                "Result",
+                attributes={
+                    "Count": "1",
+                    "IsSecure": "false",
+                    "IsXblSg": "false",
+                },
+                children=[
+                    _element(
+                        "Server",
+                        attributes={
+                            "Host": host,
+                            "isSecure": "false",
+                            "IsXblSg": "false",
+                        },
+                    )
+                ],
+            ),
+        ],
+    )
+    return _serialise(root)
+
+
 def error_xml(code: int, message: str) -> str:
     root = _element(
         "Response",
@@ -258,9 +396,19 @@ def create_ticket_result(
 
 
 def sc_auth_token_result(token: str) -> str:
-    """Build the minimal ``<Result>token</Result>`` SC-auth response.
+    """Build the SC-auth response accepted by the native task.
 
     ``SOURCE_CONFIRMED``: ``rlScCreateScAuthTokenTask::ProcessSuccess`` reads
-    the text content of the ``Result`` element into its token buffer.
+    the text content of the ``Result`` element into its token buffer.  LSO also
+    repeats the token in a ``ScAuthToken`` attribute on ``Response``; emitting
+    both keeps the parser-valid element and the wider ROS shape.
     """
-    return response_xml(element("Result", token))
+    root = _element(
+        "Response",
+        attributes={"ScAuthToken": token},
+        children=[
+            _element("Status", "1"),
+            _element("Result", token),
+        ],
+    )
+    return _serialise(root)

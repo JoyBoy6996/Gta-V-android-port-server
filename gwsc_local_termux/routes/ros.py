@@ -12,17 +12,19 @@ UNVERIFIED.  The implementation is deliberately strict:
 """
 
 import ipaddress
+import json
 import logging
 import re
 import secrets
 import time
+import uuid
 from contextlib import closing
 from typing import Any, Dict, Optional
 from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, Request, Response
 
-from .. import config, presence
+from .. import config, native_crypto, presence
 from ..auth import authenticate_native_request, get_user_by_token
 from ..database import get_db
 from ..multiplayer_relay import relay_registry
@@ -33,8 +35,13 @@ from ..tickets import mint_service_ticket
 from ..xml_protocol import (
     XML_CONTENT_TYPE,
     create_ticket_result,
+    dynamic_results_xml,
+    dynamic_status_xml,
     element,
     error_xml,
+    p2p_certificate_xml,
+    presence_servers_xml,
+    relay_servers_xml,
     response_xml,
     result,
     sc_auth_token_result,
@@ -100,20 +107,71 @@ async def _request_values(request: Request) -> Dict[str, str]:
     return values
 
 
-def _native_user(request: Request, values: Dict[str, str]) -> Optional[Dict[str, Any]]:
+def _field(values: Dict[str, str], *names: str) -> Optional[str]:
+    """Case-insensitive lookup for fields whose native spelling is unverified."""
+    for name in names:
+        if name in values:
+            return values[name]
+    lowered = {key.lower(): value for key, value in values.items()}
+    for name in names:
+        value = lowered.get(name.lower())
+        if value is not None:
+            return value
+    return None
+
+
+def _session_ticket_header(request: Request) -> Optional[str]:
+    """Return the ROS SessionTicket from any observed header spelling.
+
+    LSO uses ``ros-SessionTicket`` for post-auth native calls.  The Android
+    client spelling is `UNVERIFIED`, so accept the common variants without
+    treating an unrelated header as a credential.
+    """
+    for name in (
+        "ros-sessionticket",
+        "ros-session-ticket",
+        "x-ros-sessionticket",
+    ):
+        value = request.headers.get(name)
+        if value:
+            return value
+    return None
+
+
+def _native_user(
+    request: Request,
+    values: Dict[str, str],
+    *,
+    allow_ticket_field: bool = True,
+) -> Optional[Dict[str, Any]]:
+    form_token = (
+        _field(values, "scAuthToken")
+        or _field(values, "authToken")
+        or _field(values, "token")
+    )
+    # SOURCE_CONFIRMED: LSO's native matchmaking and P2P handlers authenticate
+    # with the ``ticket`` form field.  That field is also the *target* of the
+    # legacy renew/invalidate endpoints, so those calls opt out explicitly.
+    if allow_ticket_field:
+        form_token = form_token or _field(values, "ticket")
+    session_ticket = _field(values, "sessionTicket") or _session_ticket_header(request)
     return authenticate_native_request(
-        form_token=values.get("scAuthToken")
-        or values.get("authToken")
-        or values.get("token"),
+        form_token=form_token,
         query_token=request.query_params.get("scAuthToken")
         or request.query_params.get("token"),
         authorization=request.headers.get("authorization"),
         header_token=request.headers.get("x-gwsc-token"),
+        session_ticket=session_ticket,
     )
 
 
-def _require_user(request: Request, values: Dict[str, str]) -> Optional[Dict[str, Any]]:
-    user = _native_user(request, values)
+def _require_user(
+    request: Request,
+    values: Dict[str, str],
+    *,
+    allow_ticket_field: bool = True,
+) -> Optional[Dict[str, Any]]:
+    user = _native_user(request, values, allow_ticket_field=allow_ticket_field)
     if not user or user.get("status") != "active":
         return None
     return user
@@ -432,7 +490,7 @@ for _service, _method in _NATIVE_SC_TOKEN_METHODS:
 @router.api_route("/gwsc/api/ros/ticket/renew", methods=["GET", "POST"])
 async def renew_ticket(request: Request):
     values = await _request_values(request)
-    user = _require_user(request, values)
+    user = _require_user(request, values, allow_ticket_field=False)
     if not user:
         return _xml_error(401, 401, "A valid account token is required")
     raw_ticket = values.get("ticket") or request.headers.get("x-ticket")
@@ -475,7 +533,7 @@ async def renew_ticket(request: Request):
 @router.api_route("/gwsc/api/ros/ticket/invalidate", methods=["GET", "POST"])
 async def invalidate_ticket(request: Request):
     values = await _request_values(request)
-    user = _require_user(request, values)
+    user = _require_user(request, values, allow_ticket_field=False)
     if not user:
         return _xml_error(401, 401, "A valid account token is required")
     raw_ticket = values.get("ticket") or request.headers.get("x-ticket")
@@ -813,6 +871,30 @@ async def matchmaking_join(request: Request):
 # ---------------------------------------------------------------------------
 # Presence
 # ---------------------------------------------------------------------------
+# This must be registered before the generic ``...Presence`` aliases below,
+# whose path converter would otherwise match ``Presence.asmx/...`` too.
+@router.api_route(
+    "/{title}/{version}/{service_set}/Presence.asmx/GetPresenceServers",
+    methods=["POST"],
+)
+@router.api_route("/Presence.asmx/GetPresenceServers", methods=["POST"])
+async def native_get_presence_servers(request: Request):
+    values = await _request_values(request)
+    user = _require_user(request, values)
+    if not user:
+        return _xml_error(401, 401, "A valid account token is required")
+    if not _native_path_valid(request.path_params):
+        return _xml_error(400, 400, "Invalid native service path")
+
+    try:
+        host = native_crypto.validate_relay_host(
+            config.RELAY_PUBLIC_ADDRESS, config.RELAY_PUBLIC_PORT
+        )
+    except native_crypto.NativeCryptoError:
+        return _xml_error(503, 503, "Presence service is not configured")
+    return _xml(presence_servers_xml(host=host))
+
+
 @router.api_route("/{prefix:path}CommitPresence{rest:path}", methods=["POST", "GET"])
 async def commit_presence(request: Request):
     values = await _request_values(request)
@@ -849,4 +931,425 @@ async def query_presence(request: Request):
                 ]
             )
         )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Native matchmaking (.asmx)
+# ---------------------------------------------------------------------------
+# LSO's advertise/find handlers store the client's opaque ``attrsJson.Data``
+# and return it verbatim from Find.  That is the critical contract for making
+# a host visible to the game; the server must not try to construct the binary
+# netPeerAddress record itself.
+_NATIVE_MM_MAX_ATTRS_BYTES = 16 * 384
+_NATIVE_MM_MAX_DATA_BYTES = 8 * 384
+
+
+def _native_platform(request: Request, values: Dict[str, str]) -> str:
+    raw = (
+        values.get("platformName")
+        or values.get("platform")
+        or request.headers.get("platform")
+        or "android"
+    )
+    return str(raw).strip().upper()[:32]
+
+
+def _parse_native_attrs(raw: Optional[str]) -> tuple[dict, str]:
+    if raw is None or raw == "":
+        return {}, ""
+    if len(raw.encode("utf-8")) > _NATIVE_MM_MAX_ATTRS_BYTES:
+        raise ValueError("attrsJson is too large")
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError("attrsJson must be an object")
+    data = parsed.get("Data", "")
+    if data is None:
+        data = ""
+    if not isinstance(data, str):
+        raise ValueError("attrsJson.Data must be a string")
+    if len(data.encode("utf-8")) > _NATIVE_MM_MAX_DATA_BYTES:
+        raise ValueError("attrsJson.Data is too large")
+    attrs = {str(key): value for key, value in parsed.items() if key != "Data"}
+    return attrs, data
+
+
+def _native_match_row(session) -> ET.Element:
+    return element(
+        "R",
+        attributes={
+            "MatchId": session["session_id"],
+            "Owner": str(session["host_rockstar_id"]),
+        },
+        children=[element("Data", session["advertised_data"] or "")],
+    )
+
+
+def _required_slot_count(value: Optional[str], *, allow_zero: bool) -> Optional[int]:
+    parsed = _parse_int(value, 0, 0 if allow_zero else 1, config.MAX_SESSION_PLAYERS)
+    return parsed
+
+
+def _close_native_session(conn, session_id: str) -> None:
+    now = now_iso()
+    with conn:
+        conn.execute(
+            "UPDATE game_sessions SET is_active = 0, state = 'closed', updated_at = ? "
+            "WHERE session_id = ?",
+            (now, session_id),
+        )
+        conn.execute(
+            "UPDATE session_members SET status = 'left', last_seen = ? WHERE session_id = ?",
+            (now, session_id),
+        )
+        conn.execute("DELETE FROM relay_peers WHERE session_id = ?", (session_id,))
+    relay_registry.unregister_session(session_id)
+
+
+@router.api_route(
+    "/{title}/{version}/{service_set}/matchmaking.asmx/Advertise", methods=["POST"]
+)
+@router.api_route("/matchmaking.asmx/Advertise", methods=["POST"])
+async def native_matchmaking_advertise(request: Request):
+    values = await _request_values(request)
+    user = _require_user(request, values)
+    if not user:
+        return _xml_error(401, 401, "A valid account token is required")
+    if not _native_path_valid(request.path_params):
+        return _xml_error(400, 400, "Invalid native service path")
+
+    num_slots = _required_slot_count(values.get("numSlots"), allow_zero=False)
+    available_slots = _required_slot_count(values.get("availableSlots"), allow_zero=True)
+    if num_slots is None or available_slots is None:
+        return _xml_error(400, 400, "Invalid slot counts")
+    if available_slots > num_slots:
+        return _xml_error(400, 400, "availableSlots exceeds numSlots")
+    try:
+        attrs, opaque_data = _parse_native_attrs(values.get("attrsJson"))
+    except (ValueError, json.JSONDecodeError):
+        return _xml_error(400, 400, "Invalid attrsJson")
+
+    platform = _native_platform(request, values)
+    game_version = (
+        values.get("gameVersion") or request.headers.get("game-version") or ""
+    )[:64]
+    host_ip = config.PUBLIC_HOST or client_ip(request)
+    host_port = max(1, config.RELAY_PORT)
+    match_id = str(uuid.uuid4())
+    now = now_iso()
+    expires_at = iso_after(config.NATIVE_MATCHMAKING_SESSION_SECONDS)
+
+    with closing(get_db()) as conn:
+        active = conn.execute(
+            "SELECT session_id FROM game_sessions "
+            "WHERE host_account_id = ? AND is_active = 1",
+            (user["id"],),
+        ).fetchall()
+        if len(active) >= config.MAX_SESSIONS_PER_HOST:
+            return _xml_error(429, 429, "Too many active sessions")
+        for row in active:
+            _close_native_session(conn, row["session_id"])
+
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO game_sessions
+                    (session_id, host_account_id, host_rockstar_id, host_ip,
+                     host_port, session_type, region, visibility, state,
+                     max_players, current_players, is_active, attributes,
+                     advertised_data, available_slots, platform, game_version,
+                     expires_at, created_at, updated_at, last_heartbeat)
+                VALUES (?, ?, ?, ?, ?, 'FreeMode', 'unknown', 'public',
+                        'advertised', ?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    match_id,
+                    user["id"],
+                    user["rockstar_id"],
+                    host_ip,
+                    host_port,
+                    num_slots,
+                    json.dumps(attrs, separators=(",", ":")),
+                    opaque_data,
+                    available_slots,
+                    platform,
+                    game_version,
+                    expires_at,
+                    now,
+                    now,
+                    now,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO session_members
+                    (session_id, account_id, rockstar_id, peer_address, status,
+                     joined_at, last_seen)
+                VALUES (?, ?, ?, ?, 'joined', ?, ?)
+                ON CONFLICT(session_id, rockstar_id) DO UPDATE SET
+                    account_id = excluded.account_id,
+                    status = 'joined',
+                    last_seen = excluded.last_seen
+                """,
+                (match_id, user["id"], user["rockstar_id"], f"{host_ip}:{host_port}", now, now),
+            )
+
+    log.info(
+        "Native session advertised match=%s account=%s platform=%s slots=%d/%d data_bytes=%d",
+        match_id,
+        user["id"],
+        platform,
+        available_slots,
+        num_slots,
+        len(opaque_data.encode("utf-8")),
+    )
+    return _xml(dynamic_status_xml(match_id=match_id))
+
+
+@router.api_route(
+    "/{title}/{version}/{service_set}/matchmaking.asmx/Update", methods=["POST"]
+)
+@router.api_route("/matchmaking.asmx/Update", methods=["POST"])
+async def native_matchmaking_update(request: Request):
+    values = await _request_values(request)
+    user = _require_user(request, values)
+    if not user:
+        return _xml_error(401, 401, "A valid account token is required")
+    if not _native_path_valid(request.path_params):
+        return _xml_error(400, 400, "Invalid native service path")
+
+    match_id = values.get("matchId") or values.get("match_id")
+    if not match_id or len(match_id) > 64:
+        return _xml_error(400, 400, "Invalid match id")
+    num_slots = _required_slot_count(values.get("numSlots"), allow_zero=False)
+    available_slots = _required_slot_count(values.get("availableSlots"), allow_zero=True)
+    if num_slots is None or available_slots is None or available_slots > num_slots:
+        return _xml_error(400, 400, "Invalid slot counts")
+    try:
+        attrs, opaque_data = _parse_native_attrs(values.get("attrsJson"))
+    except (ValueError, json.JSONDecodeError):
+        return _xml_error(400, 400, "Invalid attrsJson")
+
+    platform = _native_platform(request, values)
+    now = now_iso()
+    with closing(get_db()) as conn:
+        session = conn.execute(
+            "SELECT * FROM game_sessions WHERE session_id = ? AND is_active = 1",
+            (match_id,),
+        ).fetchone()
+        if not session:
+            return _xml_error(404, 404, "Session not found")
+        member = conn.execute(
+            "SELECT id FROM session_members "
+            "WHERE session_id = ? AND account_id = ? AND status = 'joined'",
+            (match_id, user["id"]),
+        ).fetchone()
+        if session["host_account_id"] != user["id"] and not member:
+            return _xml_error(403, 403, "You are not a member of this session")
+        with conn:
+            conn.execute(
+                """
+                UPDATE game_sessions SET
+                    max_players = ?, available_slots = ?, attributes = ?,
+                    advertised_data = ?, platform = ?, expires_at = ?,
+                    updated_at = ?, last_heartbeat = ?
+                WHERE session_id = ?
+                """,
+                (
+                    num_slots,
+                    available_slots,
+                    json.dumps(attrs, separators=(",", ":")),
+                    opaque_data,
+                    platform,
+                    iso_after(config.NATIVE_MATCHMAKING_SESSION_SECONDS),
+                    now,
+                    now,
+                    match_id,
+                ),
+            )
+    return _xml(dynamic_status_xml())
+
+
+@router.api_route(
+    "/{title}/{version}/{service_set}/matchmaking.asmx/Find", methods=["POST"]
+)
+@router.api_route("/matchmaking.asmx/Find", methods=["POST"])
+async def native_matchmaking_find(request: Request):
+    values = await _request_values(request)
+    user = _require_user(request, values)
+    if not user:
+        return _xml_error(401, 401, "A valid account token is required")
+    if not _native_path_valid(request.path_params):
+        return _xml_error(400, 400, "Invalid native service path")
+
+    min_slots = _parse_int(values.get("availableSlots"), 1, 0, config.MAX_SESSION_PLAYERS)
+    max_results = _parse_int(values.get("maxResults"), 15, 1, 50)
+    if min_slots is None or max_results is None:
+        return _xml_error(400, 400, "Invalid matchmaking filters")
+    platform = _native_platform(request, values)
+    now = now_iso()
+
+    client_is_remote = True
+    if request.client:
+        try:
+            client_is_remote = not ipaddress.ip_address(request.client.host).is_private
+        except ValueError:
+            client_is_remote = True
+
+    with closing(get_db()) as conn:
+        with conn:
+            conn.execute(
+                "UPDATE game_sessions SET is_active = 0, state = 'closed', updated_at = ? "
+                "WHERE expires_at IS NOT NULL AND expires_at <= ? AND is_active = 1",
+                (now, now),
+            )
+        rows = conn.execute(
+            """
+            SELECT * FROM game_sessions
+            WHERE is_active = 1
+              AND state IN ('advertised', 'active')
+              AND available_slots >= ?
+              AND platform IN (?, '')
+              AND (expires_at IS NULL OR expires_at > ?)
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (min_slots, platform, now, max_results),
+        ).fetchall()
+
+    visible = [
+        row
+        for row in rows
+        if not (client_is_remote and _is_unreachable_for_remote(row["host_ip"]))
+    ]
+    return _xml(dynamic_results_xml([_native_match_row(row) for row in visible]))
+
+
+@router.api_route(
+    "/{title}/{version}/{service_set}/matchmaking.asmx/Unadvertise", methods=["POST"]
+)
+@router.api_route("/matchmaking.asmx/Unadvertise", methods=["POST"])
+async def native_matchmaking_unadvertise(request: Request):
+    values = await _request_values(request)
+    user = _require_user(request, values)
+    if not user:
+        return _xml_error(401, 401, "A valid account token is required")
+    if not _native_path_valid(request.path_params):
+        return _xml_error(400, 400, "Invalid native service path")
+    match_id = values.get("matchId") or values.get("match_id")
+    if not match_id or len(match_id) > 64:
+        return _xml_error(400, 400, "Invalid match id")
+
+    with closing(get_db()) as conn:
+        session = conn.execute(
+            "SELECT * FROM game_sessions WHERE session_id = ?", (match_id,)
+        ).fetchone()
+        if not session:
+            # LSO treats this as idempotent; do not leak session existence.
+            return _xml(dynamic_status_xml(match_id=match_id))
+        if session["host_account_id"] != user["id"]:
+            return _xml_error(403, 403, "Only the host can unadvertise this session")
+        _close_native_session(conn, match_id)
+    return _xml(dynamic_status_xml(match_id=match_id))
+
+
+@router.api_route(
+    "/{title}/{version}/{service_set}/matchmaking.asmx/UnadvertiseAll", methods=["POST"]
+)
+@router.api_route("/matchmaking.asmx/UnadvertiseAll", methods=["POST"])
+async def native_matchmaking_unadvertise_all(request: Request):
+    values = await _request_values(request)
+    user = _require_user(request, values)
+    if not user:
+        return _xml_error(401, 401, "A valid account token is required")
+    if not _native_path_valid(request.path_params):
+        return _xml_error(400, 400, "Invalid native service path")
+
+    with closing(get_db()) as conn:
+        rows = conn.execute(
+            "SELECT session_id FROM game_sessions WHERE host_account_id = ? AND is_active = 1",
+            (user["id"],),
+        ).fetchall()
+        for row in rows:
+            _close_native_session(conn, row["session_id"])
+    return _xml(dynamic_status_xml())
+
+
+# ---------------------------------------------------------------------------
+# P2P certificates and relay discovery (.asmx)
+# ---------------------------------------------------------------------------
+@router.api_route(
+    "/{title}/{version}/{service_set}/auth.asmx/CreateP2PCertificate",
+    methods=["POST"],
+)
+@router.api_route("/auth.asmx/CreateP2PCertificate", methods=["POST"])
+async def native_create_p2p_certificate(request: Request):
+    values = await _request_values(request)
+    user = _require_user(request, values)
+    if not user:
+        return _xml_error(401, 401, "A valid account token is required")
+    if not _native_path_valid(request.path_params):
+        return _xml_error(400, 400, "Invalid native service path")
+
+    public_key = _field(values, "pubKey")
+    signature = _field(values, "sig")
+    if not public_key or not signature:
+        return _xml_error(400, 400, "pubKey and sig are required")
+    try:
+        native_crypto.validate_signature_field(signature)
+        client_cert, ca_cert = native_crypto.issue_p2p_certificate(
+            public_key_b64=public_key,
+            rockstar_id=user["rockstar_id"],
+            nickname=user.get("nickname") or "player",
+            ttl_seconds=config.P2P_CERT_TTL_SECONDS,
+        )
+    except native_crypto.NativeCryptoError as exc:
+        message = str(exc)
+        if message.startswith(("pubKey", "sig")):
+            return _xml_error(400, 400, message)
+        log.warning("P2P certificate issuance failed: %s", message)
+        return _xml_error(503, 503, "P2P certificate service unavailable")
+
+    return _xml(
+        p2p_certificate_xml(
+            cert_chain=f"{client_cert.strip()}\n{ca_cert.strip()}",
+            seconds_until_expiration=config.P2P_CERT_TTL_SECONDS,
+        )
+    )
+
+
+@router.api_route(
+    "/{title}/{version}/{service_set}/GeoLocation.asmx/GetRelayServers",
+    methods=["POST"],
+)
+@router.api_route("/GeoLocation.asmx/GetRelayServers", methods=["POST"])
+@router.api_route(
+    "/{title}/{version}/{service_set}/GeoLocation.asmx/GetLocationInfoFromIP",
+    methods=["POST"],
+)
+@router.api_route("/GeoLocation.asmx/GetLocationInfoFromIP", methods=["POST"])
+async def native_get_relay_servers(request: Request):
+    values = await _request_values(request)
+    user = _require_user(request, values)
+    if not user:
+        return _xml_error(401, 401, "A valid account token is required")
+    if not _native_path_valid(request.path_params):
+        return _xml_error(400, 400, "Invalid native service path")
+
+    try:
+        host = native_crypto.validate_relay_host(
+            config.RELAY_PUBLIC_ADDRESS, config.RELAY_PUBLIC_PORT
+        )
+    except native_crypto.NativeCryptoError:
+        return _xml_error(503, 503, "Relay service is not configured")
+
+    try:
+        public_key = native_crypto.relay_public_key_b64()
+        signature = native_crypto.sign_relay_host(host)
+    except native_crypto.NativeCryptoError as exc:
+        log.warning("Relay discovery signing failed: %s", exc)
+        return _xml_error(503, 503, "Relay service unavailable")
+
+    return _xml(
+        relay_servers_xml(host=host, public_key=public_key, signature=signature)
     )

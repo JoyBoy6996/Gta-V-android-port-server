@@ -249,17 +249,22 @@ def authenticate_native_request(
     query_token: Optional[str] = None,
     authorization: Optional[str] = None,
     header_token: Optional[str] = None,
+    session_ticket: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Resolve a native ROS caller from any observed credential location.
 
     Launcher bearer tokens are tried first.  The native game presents the
-    short-lived launch ticket as ``ScAuthToken``, so a valid service ticket is
-    accepted as a fallback.  Service tickets are deliberately *not* accepted
-    by :func:`get_current_session`, which keeps the REST API scoped to
-    launcher sessions.
+    short-lived launch ticket as ``ScAuthToken``; later ROS calls present the
+    ``SessionTicket`` returned by ``CreateTicket`` in ``ros-SessionTicket``.
+    Both resolve to the same account-bound, hashed service tickets.  Service
+    tickets are deliberately *not* accepted by :func:`get_current_session`,
+    which keeps the REST API scoped to launcher sessions.
     """
     raw = form_token or query_token or header_token or extract_bearer(authorization)
     user = get_user_by_token(raw)
     if user:
         return user
-    return resolve_service_ticket(raw)
+    user = resolve_service_ticket(raw)
+    if user:
+        return user
+    return resolve_service_ticket(session_ticket)

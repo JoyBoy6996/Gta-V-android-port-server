@@ -16,7 +16,7 @@ from .time_utils import now_iso
 
 log = logging.getLogger("gwsc.database")
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 BASE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -108,6 +108,11 @@ CREATE TABLE IF NOT EXISTS game_sessions (
     current_players INTEGER DEFAULT 1,
     is_active INTEGER DEFAULT 1,
     attributes TEXT DEFAULT '{}',
+    advertised_data TEXT DEFAULT '',
+    available_slots INTEGER DEFAULT 0,
+    platform TEXT DEFAULT '',
+    game_version TEXT DEFAULT '',
+    expires_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     last_heartbeat TEXT
@@ -301,6 +306,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
     )
     _record_version(conn, 6)
 
+    # --- Version 7: native matchmaking ------------------------------------
+    # LSO stores the opaque Data value supplied by the advertising client and
+    # returns it verbatim from Find.  The server must not synthesise it.
+    _ensure_column(conn, "game_sessions", "advertised_data", "TEXT DEFAULT ''")
+    _ensure_column(conn, "game_sessions", "available_slots", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "game_sessions", "platform", "TEXT DEFAULT ''")
+    _ensure_column(conn, "game_sessions", "game_version", "TEXT DEFAULT ''")
+    _ensure_column(conn, "game_sessions", "expires_at", "TEXT")
+    _record_version(conn, 7)
+
     # Indexes are created by BASE_SCHEMA, but older databases need them too.
     conn.executescript(
         """
@@ -316,6 +331,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_achievements_user ON achievements(user_id, unlocked_at);
         CREATE INDEX IF NOT EXISTS idx_sessions_active ON game_sessions(is_active, state, updated_at);
         CREATE INDEX IF NOT EXISTS idx_sessions_host ON game_sessions(host_rockstar_id);
+        CREATE INDEX IF NOT EXISTS idx_sessions_native ON game_sessions(platform, expires_at, is_active);
         CREATE INDEX IF NOT EXISTS idx_session_members_account ON session_members(account_id);
         CREATE INDEX IF NOT EXISTS idx_presence_expiry ON presence_records(expires_at);
         CREATE INDEX IF NOT EXISTS idx_tickets_account ON service_tickets(account_id, service);

@@ -54,6 +54,10 @@ SERVER_PORT = int(PORT_ENV or os.getenv("GWSC_PORT", "8443"))
 
 RELAY_HOST = os.getenv("GWSC_RELAY_HOST", "0.0.0.0")
 RELAY_PORT = int(os.getenv("GWSC_RELAY_PORT", "6672"))
+# Address advertised by GeoLocation.asmx/GetRelayServers.  It must be the
+# publicly reachable UDP relay, not the internal listener address.
+RELAY_PUBLIC_ADDRESS = os.getenv("GWSC_RELAY_PUBLIC_ADDRESS", "").strip()
+RELAY_PUBLIC_PORT = _env_int("GWSC_RELAY_PUBLIC_PORT", RELAY_PORT)
 
 # Public hostname used when advertising matchmaking sessions to remote
 # clients.  Empty means "use the address the client connected from".
@@ -144,6 +148,22 @@ SESSION_TIMEOUT_SECONDS = _env_int("GWSC_SESSION_TIMEOUT", 300)
 MAX_SESSIONS_PER_HOST = _env_int("GWSC_MAX_SESSIONS_PER_HOST", 5)
 MAX_SESSION_PLAYERS = _env_int("GWSC_MAX_SESSION_PLAYERS", 30)
 MATCHMAKING_RESULT_LIMIT = _env_int("GWSC_MATCHMAKING_RESULT_LIMIT", 20)
+# LSO keeps native matchmaking advertisements alive for eight hours.  The
+# private REST session model uses a much shorter heartbeat timeout; native
+# sessions need their own lifetime because the game may not heartbeat at the
+# same cadence.
+NATIVE_MATCHMAKING_SESSION_SECONDS = _env_int(
+    "GWSC_NATIVE_MATCHMAKING_SESSION_SECONDS", 8 * 60 * 60
+)
+# LSO issues one-day P2P certificates from a static local CA.
+P2P_CERT_TTL_SECONDS = _env_int("GWSC_P2P_CERT_TTL", 86400)
+P2P_CERT_DIR = Path(os.getenv("GWSC_P2P_CERT_DIR", str(DATA_DIR / "certs" / "p2p")))
+P2P_CA_KEY_PATH = Path(
+    os.getenv("GWSC_P2P_CA_KEY", str(P2P_CERT_DIR / "ca-key.pem"))
+)
+P2P_CA_CERT_PATH = Path(
+    os.getenv("GWSC_P2P_CA_CERT", str(P2P_CERT_DIR / "ca-cert.pem"))
+)
 
 # ---------------------------------------------------------------------------
 # UDP relay
@@ -153,6 +173,25 @@ RELAY_PEER_TIMEOUT_SECONDS = _env_int("GWSC_RELAY_PEER_TIMEOUT", 60)
 RELAY_RATE_PACKETS_PER_SECOND = _env_int("GWSC_RELAY_RATE_PPS", 200)
 RELAY_RATE_BURST = _env_int("GWSC_RELAY_RATE_BURST", 400)
 RELAY_MAX_PEERS_PER_SESSION = _env_int("GWSC_RELAY_MAX_PEERS_PER_SESSION", 32)
+
+# LSO signs the advertised relay host with a local P-256 key and publishes the
+# SPKI public key in GetRelayServers.  These paths are distinct from the TLS
+# certificate and the P2P CA; relay keys may be rotated independently.
+RELAY_CERT_DIR = Path(
+    os.getenv("GWSC_RELAY_CERT_DIR", str(DATA_DIR / "certs" / "relay"))
+)
+RELAY_SIGNING_KEY_PATH = Path(
+    os.getenv("GWSC_RELAY_SIGNING_KEY", str(RELAY_CERT_DIR / "relay_private_key.pem"))
+)
+RELAY_PUBLIC_KEY_DER_PATH = Path(
+    os.getenv("GWSC_RELAY_PUBLIC_KEY_DER", str(RELAY_CERT_DIR / "relay_public_key.der"))
+)
+RELAY_PUBLIC_KEY_PEM_PATH = Path(
+    os.getenv("GWSC_RELAY_PUBLIC_KEY_PEM", str(RELAY_CERT_DIR / "relay_public_key.pem"))
+)
+RELAY_PUBLIC_KEY_TXT_PATH = Path(
+    os.getenv("GWSC_RELAY_PUBLIC_KEY_TXT", str(RELAY_CERT_DIR / "relay_public_key.txt"))
+)
 
 # ---------------------------------------------------------------------------
 # Economy

@@ -100,6 +100,9 @@ app.add_middleware(
         "X-Request-ID",
         "X-GWSC-Token",
         "X-Ticket",
+        "ros-SessionTicket",
+        "ros-Session-Ticket",
+        "x-ros-sessionticket",
         "Idempotency-Key",
     ],
 )
