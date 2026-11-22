@@ -9,6 +9,8 @@ UNVERIFIED instead of pretending it is a Rockstar-compatible contract.
 import os
 from pathlib import Path
 
+from .xml_protocol import service_hosts
+
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 
@@ -123,6 +125,17 @@ SSE_HEARTBEAT_SECONDS = _env_int("GWSC_SSE_HEARTBEAT", 15)
 # Native ROS / matchmaking
 # ---------------------------------------------------------------------------
 TICKET_EXPIRY_SECONDS = _env_int("GWSC_TICKET_EXPIRY", 3600)
+
+# Optional native service-host redirect.  SOURCE_CONFIRMED: the installed
+# launcher already passes ``-rosHost=<host>`` to the game, so this is an opt-in
+# override for deployments where that value is wrong or cannot be changed.  A
+# bare ``host[:port]`` is emitted as ``<S ep=".." h=".."/>`` in CreateTicket
+# responses; '*' matches every native ROS endpoint.  Empty keeps the current
+# behaviour (no Services block).  Invalid values fail at startup.
+NATIVE_SERVICE_HOST = os.getenv("GWSC_NATIVE_SERVICE_HOST", "").strip()
+NATIVE_SERVICE_EP = os.getenv("GWSC_NATIVE_SERVICE_EP", "*").strip()
+NATIVE_SERVICE_HOSTS = service_hosts(NATIVE_SERVICE_HOST, NATIVE_SERVICE_EP)
+
 MAX_TICKETS_PER_ACCOUNT = _env_int("GWSC_MAX_TICKETS_PER_ACCOUNT", 10)
 # Launch tickets are capped per service so a burst of launches cannot evict
 # ROS tickets used by a running game session.

@@ -7,11 +7,46 @@ its contract as UNVERIFIED in the documentation.
 """
 
 import base64
+import re
 from typing import Iterable, Mapping, Optional
 from xml.etree import ElementTree as ET
 
 XML_CONTENT_TYPE = "application/xml; charset=utf-8"
 XML_DECLARATION = '<?xml version="1.0" encoding="utf-8"?>'
+
+# SOURCE_CONFIRMED: rlRosXmlCreateTicketResponseParser::ParseServiceHosts reads
+# <Services Count="N"><Hosts><S ep="..." h="..."/></Hosts></Services>.  The
+# native host buffer is 127 bytes plus a terminator, and StringWildcardCompare
+# treats '*' and '?' as wildcards.  Keep both values ASCII-only and short so a
+# configured override cannot overflow that buffer or smuggle a scheme/path.
+_NATIVE_HOST_RE = re.compile(r"[A-Za-z0-9._\-:\[\]]{1,127}")
+_NATIVE_EP_RE = re.compile(r"[A-Za-z0-9._\-:*?/\[\]]{1,127}")
+
+
+def service_hosts(host: str, endpoint: str = "*") -> list[tuple[str, str]]:
+    """Validate an optional native service-host redirect.
+
+    ``SOURCE_CONFIRMED`` schema: each pair is emitted as an ``<S ep=".." h=".."/>``
+    child of ``<Services><Hosts>``.  An empty ``host`` returns an empty list so
+    callers can pass the result straight to :func:`create_ticket_result` without
+    changing the default response.  Invalid values raise instead of being
+    silently truncated by the native client.
+    """
+    host = (host or "").strip()
+    endpoint = (endpoint or "*").strip() or "*"
+    if not host:
+        return []
+    if not _NATIVE_HOST_RE.fullmatch(host):
+        raise ValueError(
+            "native service host must be a bare host[:port] of at most 127 "
+            "safe characters (no scheme, path, whitespace or XML metacharacters)"
+        )
+    if not _NATIVE_EP_RE.fullmatch(endpoint):
+        raise ValueError(
+            "native service endpoint pattern must be at most 127 safe "
+            "characters (wildcards * and ? are allowed)"
+        )
+    return [(endpoint, host)]
 
 
 def _element(
@@ -137,6 +172,11 @@ def create_ticket_result(
     ``libgtav.so`` (``rlRosXmlCreateTicketResponseParser`` /
     ``rlRosCreateTicketResponseHelper::ApplyCreateTicketResponse``).  The
     *values* are private server credentials, not Rockstar data.
+
+    ``service_hosts`` is an optional iterable of ``(endpoint_pattern, host)``
+    pairs emitted as ``<Services Count="N"><Hosts><S ep=".." h=".."/></Hosts>``.
+    Build it with :func:`service_hosts` so values are validated before reaching
+    the fixed-size native buffers.  Leave empty to omit the block entirely.
     """
     granted = tuple(int(value) for value in privileges)
     children = [

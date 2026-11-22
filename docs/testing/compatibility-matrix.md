@@ -39,6 +39,7 @@ game session has been captured.
 | Native `.asmx` ticket methods | Yes | `test_native_ticket_aliases`, `test_native_path_is_validated`, `test_unknown_native_asmx_method_is_not_a_success` | Paths `SOURCE_CONFIRMED` + `TESTED` | Literal auth/socialclub methods; service constants are route-bound, not client input. |
 | Native SC auth token methods | Yes | `test_sc_auth_token_is_real_and_resolvable` | Response field `SOURCE_CONFIRMED` + `TESTED` | `<Result>` token is account-bound and hashed at rest. |
 | Privilege-7 banned flag avoidance | Yes | `test_native_create_ticket_is_parser_valid_and_bound_to_launch_ticket`, `test_legacy_create_ticket_also_carries_native_credentials` | `SOURCE_CONFIRMED` + `TESTED` | `HasRosPrivilege(7)` maps to `ACCESS_DENIED_BANNED`; never granted. |
+| Native service-host redirect | Yes, opt-in | `test_service_hosts_builds_expected_pairs`, `test_service_hosts_rejects_invalid_host`, `test_create_ticket_xml_emits_source_confirmed_shape`, `test_native_route_uses_configured_service_host` | Schema `SOURCE_CONFIRMED` + `TESTED`; runtime effect `UNVERIFIED` | `<Services Count="1"><Hosts><S ep="*" h=".."/></Hosts></Services>`; empty by default because the launcher already sets `-rosHost=`. |
 | Ticket renew/invalidate | Yes | `test_ticket_renew_invalidate_and_ownership` | `UNVERIFIED` | Ownership enforced; renewed XML now uses the parser-valid shape. |
 | `RosGamersSettings.json` | Yes | — | `UNVERIFIED` | Placeholder document. |
 | `CommitPresence` / `Presence` | Yes | `test_commit_presence_requires_auth_and_updates_info` | `UNVERIFIED` | Real presence count. |
@@ -61,6 +62,7 @@ game session has been captured.
 - Launch-ticket format, hashing at rest, expiry, revocation and per-service cap.
 - `CreateTicket` field names, 32-byte session key, privilege 7 exclusion and
   account binding; SC-token resolution; route-bound `.asmx` method constants.
+- Opt-in service-host redirect: validation, XML shape and route wiring.
 - SSE isolation between accounts.
 - Relay registry isolation, size/rate drops and peer expiry.
 - Legacy database migration and token invalidation.

@@ -61,6 +61,8 @@ enabled. `*.pem` and `*.key` are gitignored.
 | `GWSC_PRESENCE_TIMEOUT` | `300` | Seconds before presence expires. |
 | `GWSC_PRESENCE_TOUCH_INTERVAL` | `30` | Minimum seconds between presence refreshes. |
 | `GWSC_TICKET_EXPIRY` | `3600` | Native ticket/SC-token lifetime. Also the launch-ticket lifetime. |
+| `GWSC_NATIVE_SERVICE_HOST` | *(empty)* | Opt-in native redirect emitted as `<S h=".."/>` in CreateTicket XML. Bare `host[:port]`, no scheme/path. Empty uses the launcher's `-rosHost=`. Invalid values fail at startup. |
+| `GWSC_NATIVE_SERVICE_EP` | `*` | Wildcard pattern for `GWSC_NATIVE_SERVICE_HOST` (`ep` attribute). `*`/`?` are supported. |
 | `GWSC_MAX_TICKETS_PER_ACCOUNT` | `10` | Retained ROS tickets per account (global native cap). |
 | `GWSC_MAX_LAUNCH_TICKETS_PER_ACCOUNT` | `3` | Retained `game-launch` tickets per account; capped per service so launches cannot evict ROS tickets. |
 | `GWSC_SESSION_TIMEOUT` | `300` | Matchmaking session heartbeat timeout. |

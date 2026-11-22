@@ -192,6 +192,9 @@ def _ticket_xml_response(
         privileges=_GRANTED_PRIVILEGES,
         public_ip=_native_public_ip(request),
         account=profile,
+        # SOURCE_CONFIRMED schema, opt-in via GWSC_NATIVE_SERVICE_HOST.  Empty
+        # by default: the launcher's own -rosHost= value remains authoritative.
+        service_hosts=config.NATIVE_SERVICE_HOSTS,
     )
     return _xml(response_xml(payload))
 

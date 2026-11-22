@@ -157,10 +157,30 @@ are private server credentials, not Rockstar data.
 </Response>
 ```
 
-`Services`/`<Hosts><S ep="..." h="..."/></Hosts>` are optional and omitted: the
-native client falls back to its compiled default host
-(`roscaelifer.thevakhovske.eu.org`) or the `-rosHost=<host>` override. Emitting
-fake service hosts would be an invented contract.
+### Optional service-host redirect (`SOURCE_CONFIRMED` schema, `TESTED`)
+
+`rlRosXmlCreateTicketResponseParser::ParseServiceHosts` reads a
+`<Services Count="N"><Hosts><S ep="..." h="..."/></Hosts></Services>` block.
+`ep` is a `StringWildcardCompare` pattern (`*`/`?` are wildcards) and `h` is a
+bare `host[:port]` copied into a 127-byte native buffer. `rlRosJsonHttpTask::
+GetUrlHostName` checks these hosts before the compiled default
+(`roscaelifer.thevakhovske.eu.org`).
+
+The installed launcher already appends `-rosHost=<host>` to the game command
+line (`SOURCE_CONFIRMED` from the DEX), so the override is **opt-in** and emits
+nothing by default. Set it only when that launcher value is wrong or cannot be
+changed:
+
+```sh
+GWSC_NATIVE_SERVICE_HOST=your-public-host:8443
+GWSC_NATIVE_SERVICE_EP='*'   # default: match every native ROS endpoint
+```
+
+`service_hosts()` rejects schemes, paths, whitespace, XML metacharacters and
+values over 127 bytes rather than letting the native client truncate them.
+Invalid configuration fails at server startup. The XML shape, validation and
+route wiring are covered by `tests/test_native_service_hosts.py` (`TESTED`);
+that the redirect is honoured during a real game launch remains `UNVERIFIED`.
 
 The ticket and session ticket are random private values, stored only as SHA-256
 hashes in `service_tickets` and bound to the authenticated account, service,
