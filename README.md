@@ -7,10 +7,12 @@ with Python and FastAPI. It runs on Android/Termux, in Docker, or on a VPS.
 > for a modified client. It does not claim Grand Theft Auto Online
 > compatibility, and it is not a replacement for Rockstar's services.
 
-> **Compatibility is unverified.** The only captured client traffic is a
-> login request. Response shapes, native ROS tasks, matchmaking and gameplay
-> transport are `UNVERIFIED`. Do not read this repository as a working
-> "GTA Online server". See
+> **Compatibility is unverified.** Only a login request and the launcher
+> launch exchange are `OBSERVED`/`SOURCE_CONFIRMED`. Native `.asmx` method
+> names, `CreateTicket` XML fields and the privilege-7 banned flag are
+> `SOURCE_CONFIRMED` by static client inspection; the complete post-launch
+> request order, matchmaking and gameplay transport remain `UNVERIFIED`. Do not
+> read this repository as a working "GTA Online server". See
 > [`docs/testing/compatibility-matrix.md`](docs/testing/compatibility-matrix.md).
 
 ## Status at a glance
@@ -25,8 +27,9 @@ with Python and FastAPI. It runs on Android/Termux, in Docker, or on a VPS.
 | Conversations + messages | Implemented + tested | `UNVERIFIED` contracts |
 | SSE events (per account) | Implemented + tested | SSE suspected `SOURCE_CONFIRMED` |
 | Economy (starter pack, shark cards) | Implemented; shark cards off by default | `UNVERIFIED` |
-| Native tickets (`CreateTicket`, renew, invalidate) | Implemented + tested | `UNVERIFIED` XML |
-| Launcher game launch (`POST /gwsc/api/game-launch`) | Implemented + tested | Contract `SOURCE_CONFIRMED`; native `scAuthToken` use `INFERRED` |
+| Native `.asmx` credentials (`CreateTicket*`, `CreateScAuthToken`) | Implemented + tested | Paths/XML `SOURCE_CONFIRMED`; call order `UNVERIFIED` |
+| Native tickets (`CreateTicket`, renew, invalidate) | Implemented + tested | XML/ban flag `SOURCE_CONFIRMED` + `TESTED`; end-to-end `UNVERIFIED` |
+| Launcher game launch (`POST /gwsc/api/game-launch`) | Implemented + tested | Contract + native token plumbing `SOURCE_CONFIRMED`; end-to-end `UNVERIFIED` |
 | Presence | Implemented + tested | `UNVERIFIED` |
 | Matchmaking advertise/find/join | Implemented + tested | `INFERRED` / `UNVERIFIED` |
 | UDP relay (registration + forwarding) | Implemented + tested in isolation | `INFERRED` / `UNVERIFIED` |
@@ -48,8 +51,9 @@ isolation, limits), not client compatibility. Details:
   - chat: direct/group conversations, messages, read state, SSE events
   - launch: short-lived `game-launch` ticket for the installed client
   - economy: starter pack, optional shark-card claims (development only)
-- **Native ROS-style services**: `CreateTicket`, ticket renew/invalidate,
-  `RosGamersSettings.json`, presence, matchmaking.
+- **Native ROS-style services**: `.asmx` ticket/SC-token methods,
+  `CreateTicket` plus renew/invalidate, `RosGamersSettings.json`, presence,
+  matchmaking. Credentials omit the client's privilege-7 banned flag.
 - **Session-aware UDP relay** on `6672/udp` with authenticated registration,
   per-peer rate limiting and session isolation.
 - **Security**: PBKDF2 password hashing, hashed bearer tokens and tickets,
@@ -119,7 +123,7 @@ Notable defaults:
 | [`docs/operations/troubleshooting.md`](docs/operations/troubleshooting.md) | Common failures. |
 | [`docs/protocol/ANDROID_PROTOCOL_INVENTORY.md`](docs/protocol/ANDROID_PROTOCOL_INVENTORY.md) | Route inventory + evidence labels. |
 | [`docs/protocol/gwsc.md`](docs/protocol/gwsc.md) | GWSC REST/SSE contract. |
-| [`docs/protocol/native-ros.md`](docs/protocol/native-ros.md) | Tickets, presence, settings. |
+| [`docs/protocol/native-ros.md`](docs/protocol/native-ros.md) | Native `.asmx` paths, `CreateTicket` XML, ban flag, presence, settings. |
 | [`docs/protocol/matchmaking.md`](docs/protocol/matchmaking.md) | Session lifecycle. |
 | [`docs/protocol/multiplayer-transport.md`](docs/protocol/multiplayer-transport.md) | UDP relay. |
 | [`docs/testing/compatibility-matrix.md`](docs/testing/compatibility-matrix.md) | What is tested vs unverified. |

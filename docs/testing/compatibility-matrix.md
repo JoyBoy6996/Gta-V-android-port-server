@@ -32,11 +32,14 @@ game session has been captured.
 | Messages | Yes | `test_message_validation_and_rate_limit` | `UNVERIFIED` | Validation, pagination, rate limit. |
 | SSE events | Yes | `test_sse_requires_authentication`, `test_event_bus_never_crosses_accounts` | `SOURCE_CONFIRMED` (SSE suspected) | Per-account only; event schema `UNVERIFIED`. |
 | Launcher game launch (`POST /gwsc/api/game-launch`) | Yes | `test_game_launch_returns_ticket_and_stores_only_its_hash`, `test_game_launch_validates_body`, `test_game_launch_requires_authentication` | `SOURCE_CONFIRMED` (installed client) | Request `{buildReport}`, response `{ticket}` matching `[A-Za-z0-9_-]{43}`. Ticket hashed at rest. |
-| Launch ticket as native `scAuthToken` | Yes | `test_launch_ticket_authenticates_native_requests_only`, `test_expired_and_revoked_launch_tickets_are_rejected` | `INFERRED` | Native `ScAuthToken` consumption is `UNVERIFIED`; REST sessions reject launch tickets. |
+| Launch ticket as native `scAuthToken` | Yes | `test_launch_ticket_authenticates_native_requests_only`, `test_expired_and_revoked_launch_tickets_are_rejected`, `test_native_create_ticket_is_parser_valid_and_bound_to_launch_ticket` | `SOURCE_CONFIRMED` plumbing; end-to-end `UNVERIFIED` | Installed DEX sets `GTAV_LAUNCH_TOKEN` from the launcher intent; native task posts it as `scAuthToken`. REST sessions reject launch tickets; call order is not captured. |
 | Shark cards | Yes, disabled by default | — | `UNVERIFIED` | Opt-in only; a request cannot prove purchase. |
 | Starter pack | Yes | — | `UNVERIFIED` | Atomic, one-time, ledgered. |
-| `CreateTicket` | Yes | `test_create_ticket_requires_authentication`, `test_create_ticket_is_bound_to_authenticated_account` | `UNVERIFIED` | Random private ticket, hashed at rest. |
-| Ticket renew/invalidate | Yes | `test_ticket_renew_invalidate_and_ownership` | `UNVERIFIED` | Ownership enforced. |
+| `CreateTicket` | Yes | `test_create_ticket_requires_authentication`, `test_create_ticket_is_bound_to_authenticated_account`, `test_native_create_ticket_is_parser_valid_and_bound_to_launch_ticket` | XML `SOURCE_CONFIRMED` + `TESTED`; end-to-end `UNVERIFIED` | Random private ticket, hashed at rest; parser-required fields emitted. |
+| Native `.asmx` ticket methods | Yes | `test_native_ticket_aliases`, `test_native_path_is_validated`, `test_unknown_native_asmx_method_is_not_a_success` | Paths `SOURCE_CONFIRMED` + `TESTED` | Literal auth/socialclub methods; service constants are route-bound, not client input. |
+| Native SC auth token methods | Yes | `test_sc_auth_token_is_real_and_resolvable` | Response field `SOURCE_CONFIRMED` + `TESTED` | `<Result>` token is account-bound and hashed at rest. |
+| Privilege-7 banned flag avoidance | Yes | `test_native_create_ticket_is_parser_valid_and_bound_to_launch_ticket`, `test_legacy_create_ticket_also_carries_native_credentials` | `SOURCE_CONFIRMED` + `TESTED` | `HasRosPrivilege(7)` maps to `ACCESS_DENIED_BANNED`; never granted. |
+| Ticket renew/invalidate | Yes | `test_ticket_renew_invalidate_and_ownership` | `UNVERIFIED` | Ownership enforced; renewed XML now uses the parser-valid shape. |
 | `RosGamersSettings.json` | Yes | — | `UNVERIFIED` | Placeholder document. |
 | `CommitPresence` / `Presence` | Yes | `test_commit_presence_requires_auth_and_updates_info` | `UNVERIFIED` | Real presence count. |
 | Matchmaking advertise/find/join/unadvertise | Yes | `test_matchmaking_advertise_find_join_unadvertise` | `UNVERIFIED` / `INFERRED` | Paths/fields unconfirmed. |
@@ -55,6 +58,8 @@ game session has been captured.
   ownership, ticket ownership, group member removal.
 - Rate limiting and body limits.
 - Launch-ticket format, hashing at rest, expiry, revocation and per-service cap.
+- `CreateTicket` field names, 32-byte session key, privilege 7 exclusion and
+  account binding; SC-token resolution; route-bound `.asmx` method constants.
 - SSE isolation between accounts.
 - Relay registry isolation, size/rate drops and peer expiry.
 - Legacy database migration and token invalidation.
@@ -63,7 +68,7 @@ game session has been captured.
 **Not proven:**
 
 - That the Android client accepts any response shape.
-- That the client calls the native paths or fields implemented here.
+- That the client calls the native paths or fields in the order implemented here.
 - That matchmaking advertises/joins the way the client expects.
 - That the UDP relay interoperates with the game's transport.
 - That the game can complete a login or enter a session.

@@ -142,7 +142,9 @@ Implemented native paths are documented in
 | Login error response | `UNVERIFIED` | Stable `{error, message, detail}` object |
 | Profile fields | `UNVERIFIED` | Public fields only; email only on `/me` |
 | SSE event names/payloads | `UNVERIFIED` | Per-account `message` and `friends` events |
-| CreateTicket XML | `UNVERIFIED` | Deterministic XML, no namespaces invented |
+| CreateTicket XML fields | `SOURCE_CONFIRMED` + `TESTED` | Field names, base64 32-byte `SessionKey`, comma-separated `Privileges`, nested `RockstarAccount`; recovered from `libgtav.so` parser |
+| Native `.asmx` method paths | `SOURCE_CONFIRMED` + `TESTED` | `auth.asmx` / `socialclub.asmx` ticket and SC-token methods from `GetServicePath` format and create-ticket task |
+| Privilege-7 banned flag | `SOURCE_CONFIRMED` + `TESTED` | `HasRosPrivilege(7)` maps to `ACCESS_DENIED_BANNED`; server credentials never grant it |
 | Launcher game-launch request/response | `SOURCE_CONFIRMED` | `{"buildReport": ...}` → `{"ticket": "<43 URL-safe chars>"}`; recovered from installed client code |
 | Matchmaking XML | `UNVERIFIED` | Private session advertisement |
 | Relay packet framing | `UNVERIFIED` | The relay forwards opaque datagrams; it does not parse game packets |
@@ -154,8 +156,8 @@ Implemented native paths are documented in
 3. Which HTTP status codes map to which launcher error strings?
 4. Does the client validate the self-signed certificate, and is pinning present?
 5. Does the client use SSE, polling, or both?
-6. What exact XML namespaces/root elements do native tasks expect?
-7. Are native tickets used as bearer credentials for other services?
+6. What exact XML namespaces/root elements do native tasks expect? (Field names are `SOURCE_CONFIRMED`; namespaces are not.)
+7. In what order are the native `.asmx` calls made after launch, and which one first consumes the launch ticket?
 8. What is the real matchmaking task path and field set?
 9. What UDP registration handshake, if any, does the game use?
 10. Does the client expect a particular Rockstar ID format beyond a positive integer?

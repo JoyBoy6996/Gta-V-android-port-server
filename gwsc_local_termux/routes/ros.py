@@ -15,6 +15,7 @@ import ipaddress
 import logging
 import re
 import secrets
+import time
 from contextlib import closing
 from typing import Any, Dict, Optional
 from xml.etree import ElementTree as ET
@@ -28,13 +29,15 @@ from ..multiplayer_relay import relay_registry
 from ..request_utils import client_ip
 from ..security import generate_ticket, hash_token
 from ..time_utils import iso_after, is_expired, now_iso
+from ..tickets import mint_service_ticket
 from ..xml_protocol import (
     XML_CONTENT_TYPE,
+    create_ticket_result,
     element,
     error_xml,
     response_xml,
     result,
-    ticket_result,
+    sc_auth_token_result,
 )
 
 log = logging.getLogger("gwsc.ros")
@@ -42,6 +45,17 @@ router = APIRouter(tags=["ros"])
 
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
 _SERVICE_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
+_TITLE_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,32}$")
+_VERSION_RE = re.compile(r"^[0-9]{1,5}$")
+_SERVICE_SET_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
+
+# SOURCE_CONFIRMED: privilege 7 is the "banned" flag; a missing credentials
+# object makes the native client grant it by default and show ACCESS_DENIED_BANNED.
+# 12/20/23-27 are unset in the client's own default table, so they are not
+# granted here either.
+_GRANTED_PRIVILEGES = tuple(
+    value for value in range(28) if value not in (7, 12, 20, 23, 24, 25, 26, 27)
+)
 
 
 def _xml(content: str, status_code: int = 200) -> Response:
@@ -105,6 +119,83 @@ def _require_user(request: Request, values: Dict[str, str]) -> Optional[Dict[str
     return user
 
 
+def _native_public_ip(request: Request) -> Optional[str]:
+    """Return a valid IPv4 literal for PublicIp, or omit the element."""
+    try:
+        return str(ipaddress.IPv4Address(client_ip(request)))
+    except ValueError:
+        return None
+
+
+def _ticket_xml_response(
+    request: Request,
+    user: Dict[str, Any],
+    *,
+    service: str,
+    title: str,
+    platform: str,
+    region: int,
+) -> Response:
+    """Mint private credentials and return a parser-valid CreateTicket XML.
+
+    ``TESTED``: the XML shape is covered by ``tests/test_native_auth.py``.
+    Nothing here claims compatibility with a real Rockstar service; every
+    credential is issued by this server, hashed before storage and bound to the
+    authenticated account.
+    """
+    raw_ticket = generate_ticket()
+    raw_session_ticket = generate_ticket()
+    now = int(time.time())
+
+    with closing(get_db()) as conn:
+        mint_service_ticket(
+            conn,
+            user["id"],
+            service=service,
+            raw_ticket=raw_ticket,
+            title=title,
+            platform=platform,
+            max_per_service=config.MAX_TICKETS_PER_ACCOUNT,
+        )
+        mint_service_ticket(
+            conn,
+            user["id"],
+            service=f"{service}.session",
+            raw_ticket=raw_session_ticket,
+            title=title,
+            platform=platform,
+            max_per_service=config.MAX_TICKETS_PER_ACCOUNT,
+        )
+
+    log.info(
+        "Issued native credentials for account=%s service=%s expires=%s",
+        user["id"],
+        service,
+        iso_after(config.TICKET_EXPIRY_SECONDS),
+    )
+    profile = {
+        "rockstar_id": user["rockstar_id"],
+        "email": user.get("email", ""),
+        "nickname": user.get("nickname", ""),
+        "avatar_url": user.get("avatar", ""),
+    }
+    payload = create_ticket_result(
+        ticket=raw_ticket,
+        seconds_until_expiration=config.TICKET_EXPIRY_SECONDS,
+        region=region,
+        player_account_id=user["rockstar_id"],
+        session_key=secrets.token_bytes(32),
+        session_ticket=raw_session_ticket,
+        cloud_key=secrets.token_bytes(32),
+        session_id=(now * 1000) & 0x7FFFFFFFFFFFFFFF,
+        posix_time=now,
+        privileges=_GRANTED_PRIVILEGES,
+        public_ip=_native_public_ip(request),
+        account=profile,
+    )
+    return _xml(response_xml(payload))
+
+
 def _session_xml(session) -> ET.Element:
     return element(
         "Session",
@@ -157,55 +248,14 @@ async def _create_ticket(request: Request) -> Response:
     except (TypeError, ValueError):
         region = 1
 
-    raw_ticket = generate_ticket()
-    ticket_hash = hash_token(raw_ticket)
-    now = now_iso()
-    expires_at = iso_after(config.TICKET_EXPIRY_SECONDS)
-
-    with closing(get_db()) as conn:
-        with conn:
-            conn.execute(
-                "DELETE FROM service_tickets WHERE account_id = ? AND expires_at <= ?",
-                (user["id"], now),
-            )
-            rows = conn.execute(
-                "SELECT id FROM service_tickets WHERE account_id = ? "
-                "ORDER BY issued_at DESC",
-                (user["id"],),
-            ).fetchall()
-            for row in rows[max(0, config.MAX_TICKETS_PER_ACCOUNT - 1):]:
-                conn.execute("DELETE FROM service_tickets WHERE id = ?", (row["id"],))
-            conn.execute(
-                """
-                INSERT INTO service_tickets
-                    (ticket_hash, account_id, service, title, platform,
-                     issued_at, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    ticket_hash,
-                    user["id"],
-                    service,
-                    title[:80],
-                    platform[:40],
-                    now,
-                    expires_at,
-                ),
-            )
-
-    log.info(
-        "Issued private ROS ticket for account=%s service=%s expires=%s",
-        user["id"],
-        service,
-        expires_at,
-    )
-    payload = ticket_result(
-        ticket=raw_ticket,
-        seconds_until_expiration=config.TICKET_EXPIRY_SECONDS,
+    return _ticket_xml_response(
+        request,
+        user,
+        service=service,
+        title=title,
+        platform=platform,
         region=region,
-        player_account_id=user["rockstar_id"],
     )
-    return _xml(response_xml(payload))
 
 
 @router.api_route("/{title}/{version}/{service}/CreateTicket{rest:path}", methods=["GET", "POST"])
@@ -221,6 +271,157 @@ async def create_ticket_version(request: Request, title: str, version: str, rest
 @router.api_route("/CreateTicket{rest:path}", methods=["GET", "POST"])
 async def create_ticket_root(request: Request, rest: str = ""):
     return await _create_ticket(request)
+
+
+# ---------------------------------------------------------------------------
+# Native .asmx credentials
+# ---------------------------------------------------------------------------
+# SOURCE_CONFIRMED: rlRosHttpTask::GetServicePath formats
+# "%s/%d/%s/%s" (title/version/serviceSet/method) and the create-ticket task's
+# service methods are the .asmx names below.  The game posts form params
+# ``platformName=pcros&scAuthToken=...`` to these paths.
+_NATIVE_TICKET_METHODS = (
+    ("auth.asmx", "CreateTicketScAuthToken"),
+    ("auth.asmx", "CreateTicketSc3"),
+    ("auth.asmx", "CreateTicket"),
+    ("socialclub.asmx", "CreateTicketScAuthToken"),
+)
+_NATIVE_SC_TOKEN_METHODS = (
+    ("auth.asmx", "CreateScAuthToken"),
+    ("socialclub.asmx", "CreateScAuthToken"),
+    ("socialclub.asmx", "GetScAuthToken"),
+)
+
+
+def _native_path_valid(params: Dict[str, str]) -> bool:
+    title = params.get("title")
+    version = params.get("version")
+    service_set = params.get("service_set")
+    if title is None:  # unprefixed alias
+        return True
+    return bool(
+        _TITLE_RE.match(title)
+        and _VERSION_RE.match(version or "")
+        and _SERVICE_SET_RE.match(service_set or "")
+    )
+
+
+def _native_values(
+    params: Dict[str, str],
+    values: Dict[str, str],
+    service: str,
+    method: str,
+):
+    # SOURCE_CONFIRMED: the .asmx service and method are literal path segments
+    # from GetServicePath("%s/%d/%s/%s"), not request-supplied values.  They are
+    # captured by the per-route wrapper below so an arbitrary path cannot
+    # mint credentials for an unexpected service.
+    qualified_service = f"{service}/{method}"
+    title = params.get("title") or values.get("title") or ""
+    platform = values.get("platformName") or values.get("platform") or "android"
+    try:
+        region = int(values.get("region") or 1)
+    except (TypeError, ValueError):
+        region = 1
+    return qualified_service, title, platform, region
+
+
+async def native_create_ticket(request: Request, service: str, method: str):
+    values = await _request_values(request)
+    user = _require_user(request, values)
+    if not user:
+        return _xml_error(401, 401, "A valid account token is required")
+    if not _native_path_valid(request.path_params):
+        return _xml_error(400, 400, "Invalid native service path")
+    qualified_service, title, platform, region = _native_values(
+        request.path_params, values, service, method
+    )
+    return _ticket_xml_response(
+        request,
+        user,
+        service=qualified_service,
+        title=title,
+        platform=platform,
+        region=region,
+    )
+
+
+async def native_sc_auth_token(request: Request, service: str, method: str):
+    values = await _request_values(request)
+    user = _require_user(request, values)
+    if not user:
+        return _xml_error(401, 401, "A valid account token is required")
+    if not _native_path_valid(request.path_params):
+        return _xml_error(400, 400, "Invalid native service path")
+    qualified_service, title, platform, _region = _native_values(
+        request.path_params, values, service, method
+    )
+    raw_token = generate_ticket()
+    with closing(get_db()) as conn:
+        mint_service_ticket(
+            conn,
+            user["id"],
+            service=qualified_service,
+            raw_ticket=raw_token,
+            title=title,
+            platform=platform,
+            max_per_service=3,
+        )
+    log.info(
+        "Issued private SC auth token for account=%s service=%s",
+        user["id"],
+        qualified_service,
+    )
+    return _xml(sc_auth_token_result(raw_token))
+
+
+def _bind_native_endpoint(endpoint, service: str, method: str):
+    """Capture the literal .asmx service/method for a registered route.
+
+    FastAPI only injects named path/query parameters into the endpoint
+    signature.  A closure keeps these SOURCE_CONFIRMED path constants out of
+    client-controlled input while letting both prefixed and root aliases share
+    one implementation.
+    """
+
+    async def route(request: Request):
+        return await endpoint(request, service, method)
+
+    route.__name__ = (
+        f"{endpoint.__name__}_{service.replace('.', '_')}_{method}"
+    )
+    return route
+
+
+for _service, _method in _NATIVE_TICKET_METHODS:
+    _endpoint = _bind_native_endpoint(native_create_ticket, _service, _method)
+    router.add_api_route(
+        f"/{{title}}/{{version}}/{{service_set}}/{_service}/{_method}",
+        _endpoint,
+        methods=["GET", "POST"],
+        tags=["ros"],
+    )
+    router.add_api_route(
+        f"/{_service}/{_method}",
+        _endpoint,
+        methods=["GET", "POST"],
+        tags=["ros"],
+    )
+
+for _service, _method in _NATIVE_SC_TOKEN_METHODS:
+    _endpoint = _bind_native_endpoint(native_sc_auth_token, _service, _method)
+    router.add_api_route(
+        f"/{{title}}/{{version}}/{{service_set}}/{_service}/{_method}",
+        _endpoint,
+        methods=["GET", "POST"],
+        tags=["ros"],
+    )
+    router.add_api_route(
+        f"/{_service}/{_method}",
+        _endpoint,
+        methods=["GET", "POST"],
+        tags=["ros"],
+    )
 
 
 @router.api_route("/ros/ticket/renew", methods=["GET", "POST"])
@@ -247,39 +448,23 @@ async def renew_ticket(request: Request):
         if is_expired(row["expires_at"]):
             return _xml_error(403, 403, "Ticket has expired")
 
-        new_raw = generate_ticket()
-        now = now_iso()
-        expires_at = iso_after(config.TICKET_EXPIRY_SECONDS)
         with conn:
             conn.execute(
                 "UPDATE service_tickets SET revoked_at = ? WHERE id = ?",
-                (now, row["id"]),
+                (now_iso(), row["id"]),
             )
-            conn.execute(
-                """
-                INSERT INTO service_tickets
-                    (ticket_hash, account_id, service, title, platform,
-                     issued_at, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    hash_token(new_raw),
-                    user["id"],
-                    row["service"],
-                    row["title"],
-                    row["platform"],
-                    now,
-                    expires_at,
-                ),
-            )
+        service = row["service"]
+        title = row["title"] or ""
+        platform = row["platform"] or "android"
 
-    payload = ticket_result(
-        ticket=new_raw,
-        seconds_until_expiration=config.TICKET_EXPIRY_SECONDS,
+    return _ticket_xml_response(
+        request,
+        user,
+        service=service,
+        title=title,
+        platform=platform,
         region=1,
-        player_account_id=user["rockstar_id"],
     )
-    return _xml(response_xml(payload))
 
 
 @router.api_route("/ros/ticket/invalidate", methods=["GET", "POST"])

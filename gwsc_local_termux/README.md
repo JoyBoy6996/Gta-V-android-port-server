@@ -29,22 +29,27 @@ Stop/restart with `./stop.sh` / `./restart.sh`.
   - `game-launch` ticket for the installed launcher
   - starter pack; shark-card claims disabled by default
   - per-account SSE events
-- **Native ROS-style**: `CreateTicket`, `ros/ticket/renew`,
-  `ros/ticket/invalidate`, `RosGamersSettings.json`, `CommitPresence`,
-  `Presence`, matchmaking advertise/find/join/unadvertise.
+- **Native ROS-style**: `.asmx` `CreateTicket*` / `CreateScAuthToken` methods,
+  `CreateTicket`, `ros/ticket/renew`, `ros/ticket/invalidate`,
+  `RosGamersSettings.json`, `CommitPresence`, `Presence`, matchmaking
+  advertise/find/join/unadvertise. Issued credentials omit privilege 7 (the
+  client's banned flag) and include the parser-required XML fields.
 - **UDP relay**: authenticated registration, session isolation, rate limits.
 - **Operations**: SQLite migrations, online backup, health endpoint.
 
 ## What is not verified
 
 - Login/profile response shapes accepted by the Android client.
-- Native XML task paths, namespaces and fields.
+- The exact native call order after launch, XML namespaces and any intermediate
+  token exchange. (The `.asmx` method names and `CreateTicket` field names are
+  `SOURCE_CONFIRMED` from static inspection; the full sequence is not.)
 - Matchmaking contract and real session discovery.
 - Gameplay transport over the relay.
 - Any end-to-end game login or session.
 
-Only a login **request** has been observed. Do not treat this package as a
-drop-in GTA Online server.
+Only a login **request** and the launcher launch exchange have been
+observed/source-confirmed. Do not treat this package as a drop-in GTA Online
+server.
 
 ## Layout
 
