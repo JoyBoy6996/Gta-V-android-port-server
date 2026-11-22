@@ -63,9 +63,10 @@ real handler with validation and a test; do not restore a catch-all.
 ## Native requests return 401
 
 Native handlers require a GWSC token from one of: form field
-`scAuthToken`/`authToken`/`token`, query parameter, `Authorization: Bearer`,
-or `X-GWSC-Token`. There is no fallback account. Check that the client sends
-a valid, unexpired token.
+`scAuthToken`/`authToken`/`token`/`ticket`/`sessionTicket`, query parameter,
+`Authorization: Bearer`, `X-GWSC-Token`, or `ros-SessionTicket` (and spelling
+variants). There is no fallback account. Check that the client sends a valid,
+unexpired ticket.
 
 ## SSE stream disconnects
 
@@ -114,6 +115,27 @@ Never delete a production database without a verified backup.
 - Capture is disabled in production and when `GWSC_CAPTURE_ENABLED=false`.
 - The directory must be writable (`captures/`, mode 0700).
 - Bodies above `GWSC_CAPTURE_MAX_BODY` are truncated, not skipped.
+
+## Game launches but Online shows login
+
+This is a **native sign-in** question, not a launcher-popup question. The
+launcher sets `GTAV_LAUNCH_TOKEN`, but static analysis has not proven that the
+native game consumes it for ROS authentication. Do not rebuild the APK until a
+native request shows otherwise.
+
+Capture one attempt with:
+
+```bash
+tail -f gwsc_local_termux/logs/gwsc.log | grep -E \
+  'auth\.asmx|matchmaking\.asmx|GeoLocation\.asmx|Presence\.asmx|game-launch'
+```
+
+Redact every token, ticket, cookie and email before sharing. The useful
+evidence is the **path**, HTTP status and request ID, not the credential
+values. If no native `.asmx` paths appear after tapping Online, the client is
+not reaching this backend and the host/`-rosHost=` handoff is still the
+problem. If they appear with 401, the credential field/spelling is the problem.
+See [`protocol/ps4-server-comparison.md`](../protocol/ps4-server-comparison.md).
 
 ## Still stuck
 
