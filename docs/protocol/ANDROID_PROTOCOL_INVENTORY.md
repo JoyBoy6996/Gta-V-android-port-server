@@ -142,7 +142,7 @@ Implemented native paths are documented in
 | Login error response | `UNVERIFIED` | Stable `{error, message, detail}` object |
 | Profile fields | `UNVERIFIED` | Public fields only; email only on `/me` |
 | SSE event names/payloads | `UNVERIFIED` | Per-account `message` and `friends` events |
-| CreateTicket XML fields | `SOURCE_CONFIRMED` + `TESTED` | Field names, base64 32-byte `SessionKey`, comma-separated `Privileges`, nested `RockstarAccount`; recovered from `libgtav.so` parser |
+| CreateTicket XML fields | `SOURCE_CONFIRMED` + `TESTED` | Field names, base64 32-byte `SessionKey`, comma-separated `Privileges` attribute on `PlayerAccountId`, nested `RockstarAccount`; recovered from `libgtav.so` parser |
 | Native `.asmx` method paths | `SOURCE_CONFIRMED` + `TESTED` | `auth.asmx` / `socialclub.asmx` ticket and SC-token methods from `GetServicePath` format and create-ticket task |
 | Privilege-7 banned flag | `SOURCE_CONFIRMED` + `TESTED` | `HasRosPrivilege(7)` maps to `ACCESS_DENIED_BANNED`; server credentials never grant it |
 | Launcher game-launch request/response | `SOURCE_CONFIRMED` | `{"buildReport": ...}` → `{"ticket": "<43 URL-safe chars>"}`; recovered from installed client code |

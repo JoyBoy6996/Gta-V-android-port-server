@@ -305,10 +305,10 @@ def create_ticket_result(
     """Build the CreateTicket response accepted by the installed client.
 
     ``SOURCE_CONFIRMED``: the field names, the 32-byte base64 ``SessionKey``,
-    the comma-separated ``Privileges`` bit list and the ``RockstarAccount``
-    nesting were recovered from the native XML parser and credential helper in
-    ``libgtav.so`` (``rlRosXmlCreateTicketResponseParser`` /
-    ``rlRosCreateTicketResponseHelper::ApplyCreateTicketResponse``).  The
+    the comma-separated ``Privileges`` attribute on ``PlayerAccountId`` and the
+    ``RockstarAccount`` nesting were recovered from the native XML parser and
+    credential helper in ``libgtav.so`` (``rlRosXmlCreateTicketResponseParser``
+    / ``rlRosCreateTicketResponseHelper::ApplyCreateTicketResponse``).  The
     *values* are private server credentials, not Rockstar data.
 
     ``service_hosts`` is an optional iterable of ``(endpoint_pattern, host)``
@@ -317,15 +317,22 @@ def create_ticket_result(
     the fixed-size native buffers.  Leave empty to omit the block entirely.
     """
     granted = tuple(int(value) for value in privileges)
+    # SOURCE_CONFIRMED: rlRosXmlCreateTicketResponseParser::Parse reads
+    # FindAttributeAnyCase("Privileges") from the PlayerAccountId node and
+    # copies that value to rlRosCreateTicketResponse+0x48.
+    # rlRosCreateTicketResponseHelper::ApplyCreateTicketResponse then parses
+    # the comma-separated list into the credentials privilege bitmask.
+    # A sibling <Privileges> element is ignored by this Android build.
+    privileges_value = ",".join(str(value) for value in granted)
     children = [
         element("Ticket", ticket),
         element("SecsUntilExpiration", str(seconds_until_expiration)),
         element("Region", str(region)),
-        element("PlayerAccountId", str(player_account_id)),
-        # The native helper parses this comma-separated list into the
-        # credentials privilege bitmask.  Privilege 7 is the "banned" flag and
-        # must not be granted; the caller chooses the exact set.
-        element("Privileges", ",".join(str(value) for value in granted)),
+        element(
+            "PlayerAccountId",
+            str(player_account_id),
+            attributes={"Privileges": privileges_value},
+        ),
         element("DisabledSecurityFlags", "0"),
         element("SessionId", str(session_id)),
         element("SessionKey", _b64(session_key)),

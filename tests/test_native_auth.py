@@ -60,14 +60,19 @@ def test_native_create_ticket_is_parser_valid_and_bound_to_launch_ticket(client,
     assert len(base64.b64decode(key, validate=True)) == 32
     assert 0 < len(result.findtext("SessionTicket") or "") <= 127
 
+    # SOURCE_CONFIRMED: the Android parser reads Privileges as an attribute
+    # of PlayerAccountId, not as a sibling <Privileges> element.
+    player_node = result.find("PlayerAccountId")
+    assert player_node is not None
+    assert result.find("Privileges") is None
     privileges = {
         int(value)
-        for value in (result.findtext("Privileges") or "").split(",")
+        for value in (player_node.get("Privileges") or "").split(",")
         if value
     }
     # Privilege 7 is the client's "banned" flag; it must never be granted.
     assert 7 not in privileges
-    assert {3, 5}.issubset(privileges)
+    assert {1, 3, 5}.issubset(privileges)
     assert result.find("./Privs/i[@id='7']").get("g") == "false"
 
     sc_account = result.find("./RockstarAccount")
@@ -227,4 +232,6 @@ def test_legacy_create_ticket_also_carries_native_credentials(client, make_accou
     result = _root(response).find("./Result")
     assert len(base64.b64decode(result.findtext("SessionKey"), validate=True)) == 32
     assert int(result.findtext("SecsUntilExpiration")) >= 1
-    assert "7" not in (result.findtext("Privileges") or "").split(",")
+    player_node = result.find("PlayerAccountId")
+    assert player_node is not None
+    assert "7" not in (player_node.get("Privileges") or "").split(",")

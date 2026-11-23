@@ -94,8 +94,16 @@ session. `tests/test_native_auth.py` covers the header path
 When privilege 7 is present, the native function returns `15`
 (`ACCESS_DENIED_BANNED`); privilege 16 is the separate suspended result. The
 credential parser builds the privilege bitmask from the comma-separated
-`<Privileges>` text. The optional `<Privs><i .../></Privs>` list is parsed but
-is **not** what `HasPrivilege` reads.
+`Privileges` **attribute on `<PlayerAccountId>`**, not from a sibling
+`<Privileges>` element. The optional `<Privs><i .../></Privs>` list is parsed
+but is **not** what `HasPrivilege` reads.
+
+`SOURCE_CONFIRMED` xrefs: `rlRosXmlCreateTicketResponseParser::Parse` calls
+`FindAttributeAnyCase("Privileges")` at `0x2c81ea8` and copies the value to
+response offset `0x48`; `rlRosCreateTicketResponseHelper::
+ApplyCreateTicketResponse` parses that string at `0x2c81628` and stores the
+bitmask at `0x2c818ec`. A sibling `<Privileges>` element is ignored by this
+Android build.
 
 Therefore server-issued credentials deliberately:
 
@@ -103,9 +111,11 @@ Therefore server-issued credentials deliberately:
 - grant privileges 3 and 5 (online/standard access);
 - avoid the client's own unset defaults 12 and 20-27.
 
-This is covered by `tests/test_native_auth.py` (`TESTED`). It fixes the
-previous empty/zero privilege XML, which left the native credentials object
-without a granted privilege mask and produced the banned screen.
+This is covered by `tests/test_native_auth.py` (`TESTED`). An earlier version
+emitted `<Privileges>` as a sibling element; the Android parser ignored it,
+leaving the native credentials object without a granted privilege mask. The
+fix moves the comma-separated list into the `Privileges` attribute on
+`PlayerAccountId`.
 
 ## Native `.asmx` credential paths
 
@@ -155,8 +165,7 @@ are private server credentials, not Rockstar data.
     <Ticket>gwsc_ticket_...</Ticket>
     <SecsUntilExpiration>3600</SecsUntilExpiration>
     <Region>1</Region>
-    <PlayerAccountId>10001</PlayerAccountId>
-    <Privileges>0,1,2,3,4,5,6,8,9,10,11,13,14,15,16,17,18,19,21,22</Privileges>
+    <PlayerAccountId Privileges="0,1,2,3,4,5,6,8,9,10,11,13,14,15,16,17,18,19,21,22">10001</PlayerAccountId>
     <DisabledSecurityFlags>0</DisabledSecurityFlags>
     <SessionId>1795315200000</SessionId>
     <SessionKey>BASE64_32_BYTES</SessionKey>

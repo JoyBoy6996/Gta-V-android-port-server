@@ -56,10 +56,11 @@ _TITLE_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,32}$")
 _VERSION_RE = re.compile(r"^[0-9]{1,5}$")
 _SERVICE_SET_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
 
-# SOURCE_CONFIRMED: privilege 7 is the "banned" flag; a missing credentials
-# object makes the native client grant it by default and show ACCESS_DENIED_BANNED.
-# 12/20/23-27 are unset in the client's own default table, so they are not
-# granted here either.
+# SOURCE_CONFIRMED: privilege 7 is the "banned" flag; the native parser reads
+# the comma-separated grant list from the Privileges attribute on
+# PlayerAccountId.  Privilege 1 is CREATE_TICKET, 3 is MULTIPLAYER and 5 is
+# CLOUD_STORAGE_READ.  12/20/23-27 are unset in the client's own default table,
+# so they are not granted here either.
 _GRANTED_PRIVILEGES = tuple(
     value for value in range(28) if value not in (7, 12, 20, 23, 24, 25, 26, 27)
 )
