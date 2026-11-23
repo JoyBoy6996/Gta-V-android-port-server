@@ -16,6 +16,7 @@ import pytest
 
 from gwsc_local_termux import config, database, object_storage
 from gwsc_local_termux.routes.lso_ugc import SET_DELETED_XML
+from gwsc_local_termux.static_assets import load_asset
 from gwsc_local_termux.time_utils import now_iso
 
 LSO = "/gta5/11/gameservices/ugc.asmx"
@@ -514,11 +515,14 @@ def test_bookmarked_query_returns_only_bookmarked_content(client, make_account):
 
 
 @pytest.mark.parametrize(
-    "trigger,expected_count",
-    [("QS6WYcjJFk2YxqYDMN8mjQ", "12"), ("hK5OgJk1BkinXGGXghhTMg", "17")],
+    "trigger,asset,expected_count",
+    [
+        ("QS6WYcjJFk2YxqYDMN8mjQ", "heists1", "12"),
+        ("hK5OgJk1BkinXGGXghhTMg", "heists2", "17"),
+    ],
 )
 def test_heist_triggers_return_byte_exact_static_xml(
-    client, make_account, trigger, expected_count
+    client, make_account, trigger, asset, expected_count
 ):
     account = make_account(
         email=f"ugc-heist-{expected_count}@example.invalid",
@@ -534,6 +538,7 @@ def test_heist_triggers_return_byte_exact_static_xml(
         },
     )
     assert response.status_code == 200, response.text
+    assert response.content == load_asset(asset)
     result = _result(_root(response))
     assert result.attrib["Count"] == expected_count
     assert result.attrib["Total"] == expected_count
