@@ -91,6 +91,35 @@ def response_xml(
     return _serialise(root)
 
 
+def lso_response_xml(
+    children: Iterable[ET.Element],
+    *,
+    xmlns: Optional[str] = None,
+    root_attributes: Optional[Mapping[str, str]] = None,
+    status: int = 1,
+) -> str:
+    """Build an LSO-shaped ``<Response>`` with stable schema attributes.
+
+    ``SOURCE_CONFIRMED``: upstream LSO handlers emit the XSD/XSI attributes and
+    a service-specific ``xmlns`` on the response root.  This helper keeps those
+    values in one place and serialises them safely.  ``root_attributes`` is for
+    additional service-defined root attributes such as telemetry settings.
+    """
+    attributes: dict[str, str] = {
+        "xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
+        "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    }
+    if xmlns:
+        attributes["xmlns"] = xmlns
+    attributes.update(root_attributes or {})
+    root = _element(
+        "Response",
+        attributes=attributes,
+        children=[_element("Status", str(status)), *list(children)],
+    )
+    return _serialise(root)
+
+
 def dynamic_results_xml(rows: Iterable[ET.Element], *, status: int = 1) -> str:
     """Build LSO-shaped ``DynamicResponse`` matchmaking results.
 

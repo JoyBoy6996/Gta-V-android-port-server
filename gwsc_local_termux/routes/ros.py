@@ -14,7 +14,6 @@ UNVERIFIED.  The implementation is deliberately strict:
 import ipaddress
 import json
 import logging
-import re
 import secrets
 import time
 import uuid
@@ -25,20 +24,34 @@ from xml.etree import ElementTree as ET
 from fastapi import APIRouter, Request, Response
 
 from .. import config, native_crypto, presence
-from ..auth import authenticate_native_request, get_user_by_token
 from ..database import get_db
 from ..multiplayer_relay import relay_registry
+from ..native_requests import (
+    SERVICE_RE as _SERVICE_RE,
+    SESSION_ID_RE as _SESSION_ID_RE,
+    SERVICE_SET_RE as _SERVICE_SET_RE,
+    TITLE_RE as _TITLE_RE,
+    VERSION_RE as _VERSION_RE,
+    bind_native_endpoint as _bind_native_endpoint,
+    field as _field,
+    native_path_valid as _native_path_valid,
+    native_user as _native_user,
+    parse_int as _parse_int,
+    request_values as _request_values,
+    require_user as _require_user,
+    session_ticket_header as _session_ticket_header,
+    xml_error as _xml_error,
+    xml_response as _xml,
+)
 from ..request_utils import client_ip
 from ..security import generate_ticket, hash_token
 from ..time_utils import iso_after, is_expired, now_iso
 from ..tickets import mint_service_ticket
 from ..xml_protocol import (
-    XML_CONTENT_TYPE,
     create_ticket_result,
     dynamic_results_xml,
     dynamic_status_xml,
     element,
-    error_xml,
     p2p_certificate_xml,
     presence_servers_xml,
     relay_servers_xml,
@@ -50,12 +63,6 @@ from ..xml_protocol import (
 log = logging.getLogger("gwsc.ros")
 router = APIRouter(tags=["ros"])
 
-_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
-_SERVICE_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
-_TITLE_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,32}$")
-_VERSION_RE = re.compile(r"^[0-9]{1,5}$")
-_SERVICE_SET_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
-
 # SOURCE_CONFIRMED: privilege 7 is the "banned" flag; the native parser reads
 # the comma-separated grant list from the Privileges attribute on
 # PlayerAccountId.  Privilege 1 is CREATE_TICKET, 3 is MULTIPLAYER and 5 is
@@ -64,118 +71,6 @@ _SERVICE_SET_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
 _GRANTED_PRIVILEGES = tuple(
     value for value in range(28) if value not in (7, 12, 20, 23, 24, 25, 26, 27)
 )
-
-
-def _xml(content: str, status_code: int = 200) -> Response:
-    return Response(content=content, media_type=XML_CONTENT_TYPE, status_code=status_code)
-
-
-def _xml_error(status_code: int, code: int, message: str) -> Response:
-    return _xml(error_xml(code, message), status_code=status_code)
-
-
-async def _request_values(request: Request) -> Dict[str, str]:
-    values: Dict[str, str] = {
-        key: value for key, value in request.query_params.items()
-    }
-    if request.method not in ("POST", "PUT", "PATCH"):
-        return values
-    content_type = request.headers.get("content-type", "").lower()
-    try:
-        if "application/json" in content_type:
-            payload = await request.json()
-            if isinstance(payload, dict):
-                values.update({str(k): str(v) for k, v in payload.items() if v is not None})
-        elif "xml" in content_type:
-            raw = await request.body()
-            if len(raw) <= config.MAX_BODY_BYTES:
-                # Reject DTD/entity payloads; native requests do not need them.
-                lowered = raw.lower()
-                if b"<!doctype" in lowered or b"<!entity" in lowered:
-                    raise ValueError("XML DTDs are not allowed")
-                root = ET.fromstring(raw)
-                for node in root.iter():
-                    tag = node.tag.split("}")[-1]
-                    if node.text and node.text.strip():
-                        values.setdefault(tag, node.text.strip())
-        else:
-            form = await request.form()
-            values.update({str(k): str(v) for k, v in form.multi_items()})
-    except Exception as exc:
-        # Malformed bodies are treated as missing fields; the caller then gets
-        # a protocol error rather than a stack trace.  Do not log the body.
-        log.info("Could not parse native request body: %s", type(exc).__name__)
-    return values
-
-
-def _field(values: Dict[str, str], *names: str) -> Optional[str]:
-    """Case-insensitive lookup for fields whose native spelling is unverified."""
-    for name in names:
-        if name in values:
-            return values[name]
-    lowered = {key.lower(): value for key, value in values.items()}
-    for name in names:
-        value = lowered.get(name.lower())
-        if value is not None:
-            return value
-    return None
-
-
-def _session_ticket_header(request: Request) -> Optional[str]:
-    """Return the ROS SessionTicket from any observed header spelling.
-
-    LSO uses ``ros-SessionTicket`` for post-auth native calls.  The Android
-    client spelling is `UNVERIFIED`, so accept the common variants without
-    treating an unrelated header as a credential.
-    """
-    for name in (
-        "ros-sessionticket",
-        "ros-session-ticket",
-        "x-ros-sessionticket",
-    ):
-        value = request.headers.get(name)
-        if value:
-            return value
-    return None
-
-
-def _native_user(
-    request: Request,
-    values: Dict[str, str],
-    *,
-    allow_ticket_field: bool = True,
-) -> Optional[Dict[str, Any]]:
-    form_token = (
-        _field(values, "scAuthToken")
-        or _field(values, "authToken")
-        or _field(values, "token")
-    )
-    # SOURCE_CONFIRMED: LSO's native matchmaking and P2P handlers authenticate
-    # with the ``ticket`` form field.  That field is also the *target* of the
-    # legacy renew/invalidate endpoints, so those calls opt out explicitly.
-    if allow_ticket_field:
-        form_token = form_token or _field(values, "ticket")
-    session_ticket = _field(values, "sessionTicket") or _session_ticket_header(request)
-    return authenticate_native_request(
-        form_token=form_token,
-        query_token=request.query_params.get("scAuthToken")
-        or request.query_params.get("token"),
-        authorization=request.headers.get("authorization"),
-        header_token=request.headers.get("x-gwsc-token"),
-        session_ticket=session_ticket,
-    )
-
-
-def _require_user(
-    request: Request,
-    values: Dict[str, str],
-    *,
-    allow_ticket_field: bool = True,
-) -> Optional[Dict[str, Any]]:
-    user = _native_user(request, values, allow_ticket_field=allow_ticket_field)
-    if not user or user.get("status") != "active":
-        return None
-    return user
 
 
 def _native_public_ip(request: Request) -> Optional[str]:
@@ -355,19 +250,6 @@ _NATIVE_SC_TOKEN_METHODS = (
 )
 
 
-def _native_path_valid(params: Dict[str, str]) -> bool:
-    title = params.get("title")
-    version = params.get("version")
-    service_set = params.get("service_set")
-    if title is None:  # unprefixed alias
-        return True
-    return bool(
-        _TITLE_RE.match(title)
-        and _VERSION_RE.match(version or "")
-        and _SERVICE_SET_RE.match(service_set or "")
-    )
-
-
 def _native_values(
     params: Dict[str, str],
     values: Dict[str, str],
@@ -435,24 +317,6 @@ async def native_sc_auth_token(request: Request, service: str, method: str):
         qualified_service,
     )
     return _xml(sc_auth_token_result(raw_token))
-
-
-def _bind_native_endpoint(endpoint, service: str, method: str):
-    """Capture the literal .asmx service/method for a registered route.
-
-    FastAPI only injects named path/query parameters into the endpoint
-    signature.  A closure keeps these SOURCE_CONFIRMED path constants out of
-    client-controlled input while letting both prefixed and root aliases share
-    one implementation.
-    """
-
-    async def route(request: Request):
-        return await endpoint(request, service, method)
-
-    route.__name__ = (
-        f"{endpoint.__name__}_{service.replace('.', '_')}_{method}"
-    )
-    return route
 
 
 for _service, _method in _NATIVE_TICKET_METHODS:
@@ -559,16 +423,6 @@ async def invalidate_ticket(request: Request):
 # ---------------------------------------------------------------------------
 # Matchmaking
 # ---------------------------------------------------------------------------
-def _parse_int(value: Optional[str], default: int, minimum: int, maximum: int) -> Optional[int]:
-    try:
-        parsed = int(value) if value is not None else default
-    except (TypeError, ValueError):
-        return None
-    if parsed < minimum or parsed > maximum:
-        return None
-    return parsed
-
-
 @router.api_route("/{prefix:path}MatchmakingAdvertiseTask{rest:path}", methods=["POST", "GET"])
 @router.api_route("/{title}/{version}/{service}/MatchmakingAdvertise{rest:path}", methods=["POST", "GET"])
 async def matchmaking_advertise(request: Request):
