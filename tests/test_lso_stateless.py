@@ -246,7 +246,7 @@ def test_achievement_inbox_and_misc_shapes(client, make_account):
     response = client.post(f"{LSO}/ProfileStats.asmx/ResetStats", data={"ticket": ticket})
     root = _root(response)
     assert _text(root, "Count") == "10"
-    assert root.find(".//{*}Results").get("Count") == "10"
+    assert root.find(".//{*}Results").get("count") == "10"
 
 
 def test_healthz_alias(client):

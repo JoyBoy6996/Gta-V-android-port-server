@@ -611,6 +611,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_active_players_recent ON active_players(platform, last_seen);
         CREATE INDEX IF NOT EXISTS idx_user_ips_user ON user_ip_addresses(user_id, last_seen_at);
         CREATE INDEX IF NOT EXISTS idx_launch_verifications_user ON launch_verifications(user_id, expires_at);
+        CREATE INDEX IF NOT EXISTS idx_stat_lookups_group ON stat_lookups(group_name);
+        CREATE INDEX IF NOT EXISTS idx_gen9_stat_lookups_group ON gen9_stat_lookups(group_name);
         """
     )
 

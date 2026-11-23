@@ -631,21 +631,6 @@ async def age_assurance_player_status(request: Request) -> Response:
     )
 
 
-async def profile_stats_reset(request: Request) -> Response:
-    _user, failure = await _authenticate(request)
-    if failure:
-        return failure
-    return xml_response(
-        lso_response_xml(
-            [
-                element("Count", "10"),
-                element("Results", attributes={"Count": "10"}),
-            ],
-            xmlns="ResetStatsResponse",
-        )
-    )
-
-
 # ---------------------------------------------------------------------------
 # Presence.asmx: attributes, messages and queries
 # ---------------------------------------------------------------------------
@@ -1120,7 +1105,6 @@ _ROUTES: Tuple[Tuple[str, str, Any], ...] = (
     ("Complaint.asmx", "WriteComplaint", complaint_write),
     ("entitlements.asmx", "GetSubscriptionDataPSN", entitlements_subscription_data_psn),
     ("AgeAssurance.asmx", "PlayerStatus", age_assurance_player_status),
-    ("ProfileStats.asmx", "ResetStats", profile_stats_reset),
     ("Presence.asmx", "Publish", presence_noop),
     ("Presence.asmx", "PostMessageToRecipients", presence_noop),
     ("Presence.asmx", "GetAttributesForGamers", presence_noop),

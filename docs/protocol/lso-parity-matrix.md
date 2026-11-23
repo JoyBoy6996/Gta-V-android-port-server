@@ -44,8 +44,8 @@ account-bound credentials.
 | matchmaking | 5 | `ADAPTED` + `TESTED` |
 | P2P / relay / presence servers | 4 | `ADAPTED` + `TESTED` |
 | stateless `.asmx` services | ~18 | Tranche 1 + `TESTED` |
-| social/profile/presence state | ~18 | Presence attributes/messages `ADAPTED` + `TESTED`; profile stats `PLANNED` |
-| saves / profile stats / UGC / news | ~25 | Saves/news/UGC binary and UGC lifecycle `ADAPTED` + `TESTED`; profile stats `PLANNED` |
+| social/profile/presence state | ~18 | Presence attributes/messages `ADAPTED` + `TESTED`; profile stats `ADAPTED` + `TESTED` |
+| saves / profile stats / UGC / news | ~25 | Saves, profile stats, UGC binary/lifecycle and news `ADAPTED` + `TESTED` |
 | clans / leaderboards / inbox | ~17 | Clans/leaderboards `ADAPTED` + `TESTED`; inbox static `ADAPTED` + `TESTED` |
 | cloud binaries / static assets | ~30 | Cloud persistence and static assets `ADAPTED` + `TESTED` |
 | Discord bot | external process | FastAPI groundwork `TESTED`; bot process remains external |
@@ -136,10 +136,10 @@ account-bound credentials.
 | `POST Presence.asmx/GetMessages` | `social_messages` DB | `ADAPTED` + `TESTED` | Real count/timestamp; marks delivered in one transaction |
 | `POST Presence.asmx/Query\|QueryWithMaxRecordLength` | attributes/active player | `ADAPTED` + `TESTED` | One canonical `PresenceQueryResponse`; 5-minute cutoff, cap 10 |
 | `POST Presence.asmx/SetAttributes\|ReplaceAttributes` | `presence_attributes` DB | `ADAPTED` + `TESTED` | Literal comma-split triples; reject non-triples; account-scoped |
-| `POST ProfileStats.asmx/ReadStatsByGamer2` | stats S3 + lookup | `PLANNED` | Packed binary stats |
-| `POST ProfileStats.asmx/ReadStatsByGroups` | stats S3 + lookup | `PLANNED` | PS5 uses `Gen9StatLookup` |
-| `POST ProfileStats.asmx/WriteStats` | stats S3 | `PLANNED` | Merge custom binary format |
-| `POST ProfileStats.asmx/ResetStats` | static | Tranche 1 | Status-only response |
+| `POST ProfileStats.asmx/ReadStatsByGamer2` | account stat blob + `stat_lookups` | `ADAPTED` + `TESTED` | Type+value-only payloads; only self handles accepted; no zero-fill |
+| `POST ProfileStats.asmx/ReadStatsByGroups` | account stat blob + lookup | `ADAPTED` + `TESTED` | Signed BE group ids; PS5 uses `gen9_stat_lookups`; only stored values returned |
+| `POST ProfileStats.asmx/WriteStats` | account stat blob + lookup | `ADAPTED` + `TESTED` | Bounded raw-DEFLATE parse; seeded allowlist; skips server-authoritative/fabricated-time ids |
+| `POST ProfileStats.asmx/ResetStats` | static | `ADAPTED` + `TESTED` | Exact source-confirmed XML; lowercase `count` attribute |
 | `POST SaveMigration.asmx/GetSourceAccountsMP` | static | `PLANNED` | Empty accounts |
 | `POST SaveMigrationSingleplayer.asmx/GetUploadedSingleplayerSaveMetadata` | session key | `PLANNED` | Never return raw keys |
 | `POST telemetry.asmx/GetTelemetryClientConfig` | static | Tranche 1 | Config attributes on root |
@@ -220,12 +220,31 @@ create metadata uses a configured HTTPS base URL plus a short-lived HMAC upload
 token and never trusts the request `Host` header. The two source-confirmed heist
 trigger ids return byte-exact digest-pinned XML from `gwsc_local_termux/static/`.
 
+`ADAPTED` + `TESTED`: `routes/lso_stats.py` implements all four ProfileStats
+methods with the source-confirmed XML namespaces and binary layouts. Stat
+definitions come only from the opt-in `stat_seeds.py` importer, which decodes the
+two upstream metadata snapshots locally, normalises the 65 hex-prefixed legacy
+hashes correctly, preserves all 24 fields and verifies the documented counts and
+Gen9-subset relationship before an atomic table replacement. The codec uses
+synthetic-vector tests only; no player blob is vendored. Reads return only real
+stored values for the authenticated account's validated platform: no zero-fill,
+no current-time overrides, and no arbitrary gamer handles. Writes are bounded,
+accept only seeded ids whose type matches, skip server-authoritative and the
+three upstream fabricated-time ids, and merge under a lock. `ResetStats` is
+pinned to the upstream lowercase `count` attribute.
+
+`UNVERIFIED`: whether the Android client accepts an empty `Values`/`Results`
+envelope before any stats have been written, and the semantics of the discarded
+first byte of the compressed `WriteStats` payload. Exact upstream RC4 response
+framing is not ported; stat definitions must be imported explicitly by an
+operator before group/hash resolution has any data.
+
 `TESTED`: Discord support is groundwork only. FastAPI does not read a Discord
 token or publish a Discord endpoint; it exposes inert, non-secret configuration
 placeholders, the real `active_player_counts()` data source, and log redaction
 for Discord credentials. The upstream bot remains a separate external process.
 
 `UNVERIFIED`: the Android client has not yet been observed calling these cloud,
-static, emblem or native active-player paths, and no successful Android Discord
+static, emblem, profile-stats or native active-player paths, and no successful Android Discord
 integration has been captured. Upstream RC4 response framing is deliberately not
 ported; native authentication uses the existing ticket/session-ticket plumbing.

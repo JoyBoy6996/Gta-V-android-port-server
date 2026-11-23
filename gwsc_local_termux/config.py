@@ -153,6 +153,16 @@ CLOUD_UPLOAD_PATH_PREFIXES = (
 # a database password or any other credential.
 PHOTO_UPLOAD_SECRET = os.getenv("GWSC_PHOTO_UPLOAD_SECRET", "")
 PHOTO_UPLOAD_TOKEN_TTL_SECONDS = _env_int("GWSC_PHOTO_UPLOAD_TOKEN_TTL", 900)
+# Opt-in local paths for the upstream stat-definition snapshots.  Nothing is
+# fetched at runtime; an empty value disables the importer CLI defaults.
+STAT_SEED_LEGACY_PATH = os.getenv("GWSC_STAT_SEED_LEGACY_PATH", "").strip()
+STAT_SEED_GEN9_PATH = os.getenv("GWSC_STAT_SEED_GEN9_PATH", "").strip()
+# WriteStats response reports 8192 source-confirmed bytes; use the same value
+# as the real compressed-input limit and bound inflation separately.
+STATS_MAX_SUBMISSION_BYTES = _env_int("GWSC_STATS_MAX_SUBMISSION_BYTES", 8192)
+STATS_MAX_DECOMPRESSED_BYTES = _env_int(
+    "GWSC_STATS_MAX_DECOMPRESSED_BYTES", 1 << 20
+)
 
 # Static asset redirects.  Upstream LSO redirects several client asset paths
 # to third-party hosts over plaintext HTTP.  This port only redirects to

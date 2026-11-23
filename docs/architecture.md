@@ -43,7 +43,7 @@ wire contract is still `UNVERIFIED`; see
                        |   friends messages        |
                        |   sharkcards events       |
                        | lso lso_cloud lso_static |
-                       |   lso_ugc                |
+                       |   lso_stats lso_ugc      |
                        |   relay  ros              |
                        +------------+--------------+
                                     |
@@ -84,6 +84,8 @@ wire contract is still `UNVERIFIED`; see
 | `generate_certs.py` | Self-signed TLS certificate with SANs for local/LAN hosts. |
 | `routes/lso.py`, `routes/lso_cloud.py`, `routes/lso_static.py` | LSO parity services: stateless/social/clan, S3-backed cloud routes, byte-exact static assets and safe redirects. |
 | `routes/lso_ugc.py` | UGC content lifecycle: bounded `&data=` frame decoder, account-bound create/update/publish/delete/query, digest-pinned heist XML and photo metadata. |
+| `routes/lso_stats.py` | ProfileStats: account-scoped reads/writes, seeded lookup allowlist, strict binary codecs and pinned ResetStats XML. |
+| `profile_stats_codec.py`, `profile_stats_store.py`, `stat_seeds.py` | Synthetic-vector-tested binary codecs, account-scoped stat blob storage and the opt-in local seed-definition importer. |
 | `routes/*.py` | Other HTTP and native endpoint handlers. |
 
 ## Request pipeline

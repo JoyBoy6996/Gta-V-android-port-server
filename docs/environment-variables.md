@@ -58,6 +58,10 @@ enabled. `*.pem` and `*.key` are gitignored.
 | `GWSC_PHOTO_UPLOAD_SECRET` | *(empty)* | Dedicated HMAC secret for UGC photo upload tokens. Required for uploads; never reused as a database password. |
 | `GWSC_PHOTO_UPLOAD_TOKEN_TTL` | `900` | Photo upload token lifetime in seconds. |
 | `GWSC_UGC_PUBLIC_BASE_URL` | *(empty)* | HTTPS base URL written into UGC photo create metadata as `cdnurl`. Falls back to `https://GWSC_PUBLIC_HOST`; never taken from the request `Host`. |
+| `GWSC_STAT_SEED_LEGACY_PATH` | *(empty)* | Local path to the legacy `stat_lookup.jsonl.b64` metadata snapshot. Opt-in importer default only; nothing is fetched at runtime. |
+| `GWSC_STAT_SEED_GEN9_PATH` | *(empty)* | Local path to `gen9_stat_lookup.jsonl.b64`. Both paths are required together. |
+| `GWSC_STATS_MAX_SUBMISSION_BYTES` | `8192` | Bound for the compressed `WriteStats` `data=` payload; matches upstream's source-confirmed advertised maximum. |
+| `GWSC_STATS_MAX_DECOMPRESSED_BYTES` | `1048576` | Bound for inflated stat data, preventing a decompression bomb. |
 
 Cloud upload paths (`/cloud/11/cloudservices/members/...`,
 `/cloud/11/cloudservices/ugc/gta5photo/upload/...`, `/ugc/gta5photo/...` and
@@ -66,6 +70,24 @@ UGC `CreateContent`/`UpdateContent`, which carry inline binary frames) use
 the smaller REST limit. The photo metadata URL must be an HTTPS base URL with
 no path, query, fragment or credentials; an invalid value fails the create
 request instead of emitting a client-controlled URL.
+
+## Profile stat definitions
+
+ProfileStats group/hash resolution has no bundled data: an operator must import
+the two upstream metadata snapshots once. The importer is local-only and
+validates the documented 40,849/28,401 counts and the Gen9-subset relationship
+before atomically replacing both lookup tables:
+
+```sh
+python -m gwsc_local_termux.stat_seeds \
+  --legacy /path/to/stat_lookup.jsonl.b64 \
+  --gen9 /path/to/gen9_stat_lookup.jsonl.b64
+```
+
+Both paths can instead be supplied with `GWSC_STAT_SEED_LEGACY_PATH` and
+`GWSC_STAT_SEED_GEN9_PATH`. The snapshots contain stat definitions, never player
+values or credentials. Until they are imported, stat reads return only values
+already stored and `WriteStats` accepts nothing.
 
 ## Static assets and redirects
 
