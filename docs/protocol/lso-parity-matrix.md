@@ -5,8 +5,10 @@ Los Santos Online source at
 `/data/user/0/com.termux/files/usr/tmp/opencode/lso-upstream`.
 `TESTED` means the FastAPI implementation has automated coverage.
 `PLANNED` means the route is inventoried but not implemented in this repository
-yet. `ADAPTED` means the upstream behavior is implemented with our stricter
-credential, validation or storage rules.
+yet. `INTENTIONALLY DISABLED` means the route is inventoried and deliberately
+left unimplemented because its upstream contract cannot be made safe without a
+new authorization/proof design. `ADAPTED` means the upstream behavior is
+implemented with our stricter credential, validation or storage rules.
 
 This document is the work plan for the user-selected **Full LSO parity** scope.
 It does not claim that platform-specific crypto, object storage, or Discord
@@ -28,6 +30,17 @@ Every ported route keeps these FastAPI rules:
 - no secrets, password bodies, session keys, tickets, or raw captures in logs;
 - opaque LSO `attrsJson.Data` stored and echoed verbatim, never synthesized.
 
+`INTENTIONALLY DISABLED` routes: the user chose to keep the platform-auth routes
+(`CreateTicketNp3/Np4/Np5`, `CreateTicketXbl2`, `ImpersonateCreateTicketXbl`,
+`loginPS4`, `UpdateTicketSc3`) and `CreateP2PCertificateCyprus` disabled.
+`SOURCE_CONFIRMED`: upstream trusts client-supplied gamertags/platform
+identifiers and session keys, and some paths disable TLS verification. Porting
+those contracts as-is would let a caller select an arbitrary account or mint a
+credential for it. These routes stay unimplemented/inert unless a new explicit
+proof model is authorized and reviewed; this is a deliberate security decision,
+not an outstanding implementation task. The normal Android launcher ticket,
+service-ticket and session-ticket paths remain `ADAPTED` + `TESTED`.
+
 Upstream LSO uses platform-specific RC4 request/response encryption and
 PS3/PS4/Xbox platform keys for most native routes. Android static analysis so
 far confirms AES for ticket keys and XOR+base64 only for the ROS User-Agent;
@@ -40,7 +53,7 @@ account-bound credentials.
 | Family | LSO routes | FastAPI status |
 | --- | --- | --- |
 | health / static | ~40 | Static assets `ADAPTED` + `TESTED`; `/health`, `/healthz` `TESTED` |
-| credentials / auth | 10 | `ADAPTED` for Android ticket paths; platform auth `PLANNED` |
+| credentials / auth | 10 | `ADAPTED` for Android ticket paths; platform auth `INTENTIONALLY DISABLED` |
 | matchmaking | 5 | `ADAPTED` + `TESTED` |
 | P2P / relay / presence servers | 4 | `ADAPTED` + `TESTED` |
 | stateless `.asmx` services | ~18 | Tranche 1 + `TESTED` |
@@ -58,7 +71,7 @@ account-bound credentials.
 | `POST /gta5/11/gameservices/Complaint.asmx/WriteComplaint` | inline stub | Tranche 1 | Static status response with valid XML |
 | `POST /cloud/11/cloudservices/members/{xbl\|sc\|np}/:id/GTA5/saves/mpstats` | `saves/savefiles.js`, S3 | `ADAPTED` + `TESTED` | Multipart save write; account from authenticated credential, safe filename |
 | `GET /cloud/11/cloudservices/members/{xbl\|sc\|np}/:id/GTA5/saves/mpstats/:name` | `saves/savefiles.js`, S3 | `ADAPTED` + `TESTED` | Binary save read; account-scoped key; `DoesNotExist` XML on miss |
-| `POST /gta5/11/gameservices/auth.asmx/CreateP2PCertificateCyprus` | `p2pCertificates/createP2PCertificate.js` | `PLANNED` | JSON identity fields are untrusted; needs authorization design |
+| `POST /gta5/11/gameservices/auth.asmx/CreateP2PCertificateCyprus` | `p2pCertificates/createP2PCertificate.js` | `INTENTIONALLY DISABLED` | JSON identity fields are untrusted; no account-binding proof design |
 | `POST /gta5/11/gameservices/auth.asmx/CreateP2PCertificate` | `p2pCertificates/createP2PCertificate.js` | `ADAPTED` + `TESTED` | Existing `native_crypto` CA issuance, stricter signature validation |
 | `GET /cloud/11/cloudservices/ugc/gta5mission/:hash/:file` | `ugc/getMissionFile.js`, UGC S3 | `ADAPTED` + `TESTED` | Mission/photo binary with primary/fallback/default lookup |
 | `GET /cloud/11/cloudservices/ugc/gta5photo/:hash/:file` | `ugc/getMissionFile.js`, UGC S3 | `ADAPTED` + `TESTED` | Same handler; unpublished content is owner-scoped |
@@ -101,11 +114,11 @@ account-bound credentials.
 | --- | --- | --- | --- |
 | `POST achievements.asmx/Synchronize` | inline stub | Tranche 1 | Status-only XML |
 | `POST achievements.asmx/GetPlayerAchievements` | hardcoded list | Tranche 1 | Private achievements table later |
-| `POST auth.asmx/CreateTicketNp3\|Np4\|Np5` | BlueSphere | `PLANNED` | Platform proof required; do not port TLS bypass |
-| `POST auth.asmx/CreateTicketXbl2` | XBL identity | `PLANNED` | Trusts gamertag upstream; needs authorization review |
-| `POST auth.asmx/ImpersonateCreateTicketXbl` | XBL impersonation | `PLANNED` | High-risk; do not enable blindly |
-| `POST /loginPS4` | PS4 login code | `PLANNED` | Non-RC4 JSON |
-| `POST /UpdateTicketSc3` | PC credentials | `PLANNED` | Non-RC4; odd clan XML response |
+| `POST auth.asmx/CreateTicketNp3\|Np4\|Np5` | BlueSphere | `INTENTIONALLY DISABLED` | Platform proof required; do not port TLS bypass |
+| `POST auth.asmx/CreateTicketXbl2` | XBL identity | `INTENTIONALLY DISABLED` | Trusts gamertag upstream; no account-binding proof |
+| `POST auth.asmx/ImpersonateCreateTicketXbl` | XBL impersonation | `INTENTIONALLY DISABLED` | High-risk impersonation; no authorization design |
+| `POST /loginPS4` | PS4 login code | `INTENTIONALLY DISABLED` | Non-RC4 JSON; platform credential proof unavailable |
+| `POST /UpdateTicketSc3` | PC credentials | `INTENTIONALLY DISABLED` | Non-RC4; odd clan XML response; no proof design |
 | `POST socialclub.asmx/GetPasswordRequirements` | static | Tranche 1 | Policy matches our validators |
 | `POST socialclub.asmx/CheckText` | static | Tranche 1 | `Count=0` |
 | `POST socialclub.asmx/CreateScAuthToken` | session ticket | `ADAPTED` + `TESTED` | Hashed account-bound token |
