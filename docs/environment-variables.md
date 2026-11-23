@@ -63,6 +63,27 @@ Cloud upload paths (`/cloud/11/cloudservices/members/...`,
 use `GWSC_OBJECT_MAX_BYTES` instead of `GWSC_MAX_BODY_BYTES`; all other routes
 keep the smaller REST limit.
 
+## Static assets and redirects
+
+Byte-exact tunables, RPF bgscripts, manifests and compatibility JSON/XML files
+are vendored under `gwsc_local_termux/static/` and need no configuration. They
+are verified by size and SHA-256 before being served. Redirect targets, however,
+must be configured explicitly.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `GWSC_STATIC_REDIRECT_PROD_CLOUD` | *(empty)* | Base URL for production CDN/static asset redirects. |
+| `GWSC_STATIC_REDIRECT_TUNABLES` | *(empty)* | Base URL for legacy tunables/static redirects. |
+| `GWSC_STATIC_REDIRECT_ROS` | *(empty)* | Base URL for the legacy ROS commerce-data redirect. |
+| `GWSC_STATIC_REDIRECT_ALLOWED_HOSTS` | *(empty)* | Comma-separated hostname allowlist for all three targets. |
+
+Each target must be an HTTPS base URL with no path, query, fragment, username
+or password. A hostname must appear in `GWSC_STATIC_REDIRECT_ALLOWED_HOSTS`.
+An empty target returns `404 redirect_not_configured`; a disallowed or
+malformed target returns `500 redirect_misconfigured` without echoing the
+configured value. Relative redirects (for example Xbox One tunables) are
+hardcoded and cannot be influenced by a client-supplied host header.
+
 ## Accounts and sessions
 
 | Variable | Default | Notes |
@@ -108,6 +129,20 @@ keep the smaller REST limit.
 | `GWSC_MAX_MESSAGES_PAGE_SIZE` | `100` | Message page cap. |
 | `GWSC_SSE_MAX_CONNECTIONS` | `5` | SSE connections per account. |
 | `GWSC_SSE_HEARTBEAT` | `15` | SSE heartbeat seconds. |
+
+## Discord (external bot)
+
+These variables are inert placeholders for an external bot process. FastAPI
+does **not** read `DISCORD_TOKEN`, expose a Discord HTTP endpoint, write bot
+state or report a credential in `/health`. Set the real token only in the
+external bot's environment.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `GWSC_DISCORD_ENABLED` | `false` | Non-secret documentation flag; does not start a bot. |
+| `GWSC_DISCORD_GUILD_ID` | *(empty)* | Non-secret guild identifier placeholder. |
+| `GWSC_DISCORD_PLAYER_WINDOW_SECONDS` | `600` | Active-player count window; matches the source-confirmed bot query. |
+| `GWSC_DISCORD_STATUS_INTERVAL_SECONDS` | `60` | Intended external status interval. |
 
 ## UDP relay
 

@@ -398,7 +398,9 @@ def test_presence_query_crewmate_sessions_uses_real_active_players(client, make_
         with conn:
             conn.execute(
                 "INSERT INTO active_players (rockstar_id, platform, last_seen) "
-                "VALUES (?, 'PS4', ?)",
+                "VALUES (?, 'PS4', ?) "
+                "ON CONFLICT(rockstar_id, platform) DO UPDATE SET "
+                "last_seen = excluded.last_seen",
                 (rid, now_iso()),
             )
             conn.execute(
@@ -429,9 +431,14 @@ def test_presence_query_crewmate_sessions_uses_real_active_players(client, make_
                 "UPDATE active_players SET last_seen = ? WHERE rockstar_id = ?",
                 ("2000-01-01T00:00:00+00:00", rid),
             )
+    # An authenticated query refreshes its caller's ActivePlayer row (the same
+    # order as upstream's middleware), so observe from a second account that
+    # has no session attribute.  The stale first account must be filtered out.
+    observer = _make_account(client, make_account, "query/stale-observer")
     response = client.post(
         f"{LSO}/Presence.asmx/Query",
-        data={"ticket": ticket, "queryName": "CrewmateSessions", "Platform": "PS4"},
+        headers=observer["headers"],
+        data={"queryName": "CrewmateSessions", "Platform": "PS4"},
     )
     assert _root(response).find(".//{*}Results").get("Count") == "0"
 

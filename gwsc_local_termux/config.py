@@ -147,6 +147,28 @@ CLOUD_UPLOAD_PATH_PREFIXES = (
 PHOTO_UPLOAD_SECRET = os.getenv("GWSC_PHOTO_UPLOAD_SECRET", "")
 PHOTO_UPLOAD_TOKEN_TTL_SECONDS = _env_int("GWSC_PHOTO_UPLOAD_TOKEN_TTL", 900)
 
+# Static asset redirects.  Upstream LSO redirects several client asset paths
+# to third-party hosts over plaintext HTTP.  This port only redirects to
+# explicitly configured HTTPS base URLs whose hostname is in the allowlist;
+# an empty target keeps the route present but returns a stable 404 rather than
+# blindly proxying a client to an untrusted host.
+STATIC_REDIRECT_PROD_CLOUD = (
+    os.getenv("GWSC_STATIC_REDIRECT_PROD_CLOUD", "").strip()
+)
+STATIC_REDIRECT_TUNABLES = os.getenv("GWSC_STATIC_REDIRECT_TUNABLES", "").strip()
+STATIC_REDIRECT_ROS = os.getenv("GWSC_STATIC_REDIRECT_ROS", "").strip()
+STATIC_REDIRECT_ALLOWED_HOSTS = frozenset(
+    host.lower() for host in _env_list("GWSC_STATIC_REDIRECT_ALLOWED_HOSTS", "")
+)
+
+# Discord support is deliberately an external process.  The gateway token is
+# never read by FastAPI; only non-secret, inert placeholders live here.  The
+# active-player window matches the source-confirmed bot query (10 minutes).
+DISCORD_ENABLED = _env_bool("GWSC_DISCORD_ENABLED", False)
+DISCORD_GUILD_ID = os.getenv("GWSC_DISCORD_GUILD_ID", "").strip()
+DISCORD_PLAYER_WINDOW_SECONDS = _env_int("GWSC_DISCORD_PLAYER_WINDOW_SECONDS", 600)
+DISCORD_STATUS_INTERVAL_SECONDS = _env_int("GWSC_DISCORD_STATUS_INTERVAL_SECONDS", 60)
+
 # ---------------------------------------------------------------------------
 # Accounts and sessions
 # ---------------------------------------------------------------------------

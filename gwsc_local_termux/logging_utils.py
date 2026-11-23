@@ -12,6 +12,11 @@ _KEY_VALUE_RE = re.compile(
 _AUTH_HEADER_RE = re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=\-]+")
 # Long opaque token-looking strings.
 _OPAQUE_RE = re.compile(r"\b(?:gwsc_|gwsc_ticket_)[A-Za-z0-9._~\-]{12,}\b")
+# Discord credentials belong to the external bot; never log them if a log
+# line happens to mention the environment variable name.
+_DISCORD_TOKEN_RE = re.compile(
+    r"(?i)\b(discord[_-]?(?:bot[_-]?)?token)(\s*[:=]\s*)([^\s,;&}]+)"
+)
 
 
 def redact_text(text: str) -> str:
@@ -19,6 +24,7 @@ def redact_text(text: str) -> str:
         return text
     text = _AUTH_HEADER_RE.sub(lambda m: f"{m.group(1)} ***", text)
     text = _KEY_VALUE_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}***", text)
+    text = _DISCORD_TOKEN_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}***", text)
     text = _OPAQUE_RE.sub("***", text)
     return text
 

@@ -12,11 +12,17 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from . import config
-from .time_utils import now_iso
+from .time_utils import iso_after, now_iso
 
 log = logging.getLogger("gwsc.database")
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
+
+# SOURCE_CONFIRMED: upstream writes ActivePlayer rows only for these platforms.
+# This allowlist also feeds the external Discord player-count query.
+ACTIVE_PLAYER_PLATFORMS = frozenset(
+    {"PS4", "PS5", "XBOX360", "XBOXONE", "PCROS"}
+)
 
 BASE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -378,7 +384,8 @@ CREATE TABLE IF NOT EXISTS active_players (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     rockstar_id INTEGER NOT NULL,
     platform TEXT NOT NULL DEFAULT '',
-    last_seen TEXT NOT NULL
+    last_seen TEXT NOT NULL,
+    UNIQUE (rockstar_id, platform)
 );
 
 CREATE TABLE IF NOT EXISTS user_ip_addresses (
@@ -534,6 +541,40 @@ def _migrate(conn: sqlite3.Connection) -> None:
     )
     _record_version(conn, 8)
 
+    # --- Version 9: one active-player row per (account, platform) ----------
+    # SOURCE_CONFIRMED: upstream ActivePlayer has a unique (RockstarId,
+    # platform) key and a (platform, lastSeen) index.  SQLite cannot add a
+    # UNIQUE constraint with ALTER TABLE, so rebuild v8 tables in place and
+    # keep the newest observation for each pair.  No rows are discarded.
+    has_unique = any(
+        bool(row[2]) and row[3] == "u"
+        for row in conn.execute("PRAGMA index_list('active_players')").fetchall()
+    )
+    if not has_unique:
+        conn.execute(
+            """
+            CREATE TABLE active_players_v9 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rockstar_id INTEGER NOT NULL,
+                platform TEXT NOT NULL DEFAULT '',
+                last_seen TEXT NOT NULL,
+                UNIQUE (rockstar_id, platform)
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO active_players_v9 (rockstar_id, platform, last_seen)
+            SELECT rockstar_id, platform, MAX(last_seen)
+            FROM active_players
+            GROUP BY rockstar_id, platform
+            """
+        )
+        conn.execute("DROP TABLE active_players")
+        conn.execute("ALTER TABLE active_players_v9 RENAME TO active_players")
+        log.info("Migration: deduplicated active_players to one row per account/platform")
+    _record_version(conn, 9)
+
     # Indexes are created by BASE_SCHEMA, but older databases need them too.
     conn.executescript(
         """
@@ -567,10 +608,65 @@ def _migrate(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_ugc_owner ON ugc_contents(user_id, content_id);
         CREATE INDEX IF NOT EXISTS idx_ugc_bookmarks_user ON ugc_mission_bookmarks(user_id, content_id);
         CREATE INDEX IF NOT EXISTS idx_active_players_lookup ON active_players(rockstar_id, platform);
+        CREATE INDEX IF NOT EXISTS idx_active_players_recent ON active_players(platform, last_seen);
         CREATE INDEX IF NOT EXISTS idx_user_ips_user ON user_ip_addresses(user_id, last_seen_at);
         CREATE INDEX IF NOT EXISTS idx_launch_verifications_user ON launch_verifications(user_id, expires_at);
         """
     )
+
+
+def touch_active_player(
+    conn: sqlite3.Connection, rockstar_id: object, platform: object
+) -> bool:
+    """Upsert one authenticated native observation into ``active_players``.
+
+    ``ADAPTED`` from upstream's session middleware: only allowlisted platforms
+    and valid account ids are written, and the caller owns the transaction.
+    Returns whether a row was written.
+    """
+    canonical = str(platform or "").strip().upper()
+    if canonical not in ACTIVE_PLAYER_PLATFORMS:
+        return False
+    try:
+        resolved_id = int(rockstar_id)
+    except (TypeError, ValueError):
+        return False
+    if resolved_id <= 0:
+        return False
+    conn.execute(
+        """
+        INSERT INTO active_players (rockstar_id, platform, last_seen)
+        VALUES (?, ?, ?)
+        ON CONFLICT(rockstar_id, platform) DO UPDATE SET last_seen = excluded.last_seen
+        """,
+        (resolved_id, canonical, now_iso()),
+    )
+    return True
+
+
+def active_player_counts(
+    conn: sqlite3.Connection, *, window_seconds: int = 600
+) -> Dict[str, int]:
+    """Count allowlisted platforms seen within ``window_seconds``.
+
+    ``ADAPTED``: the external Discord bot's source-confirmed query filters
+    ActivePlayer rows by a ten-minute window and ignores unknown platforms.
+    This is a pure read helper; no HTTP token or endpoint contract is defined.
+    """
+    if window_seconds <= 0:
+        raise ValueError("Activity window must be a positive integer")
+    counts = {platform: 0 for platform in sorted(ACTIVE_PLAYER_PLATFORMS)}
+    cutoff = iso_after(-window_seconds)
+    rows = conn.execute(
+        "SELECT platform, COUNT(*) AS total FROM active_players "
+        "WHERE last_seen >= ? GROUP BY platform",
+        (cutoff,),
+    ).fetchall()
+    for row in rows:
+        if row["platform"] in counts:
+            counts[row["platform"]] = int(row["total"])
+    counts["total"] = sum(counts.values())
+    return counts
 
 
 def init_db() -> None:

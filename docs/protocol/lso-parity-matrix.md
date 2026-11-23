@@ -39,7 +39,7 @@ account-bound credentials.
 
 | Family | LSO routes | FastAPI status |
 | --- | --- | --- |
-| health / static | ~40 | `PLANNED` except `/health` and `/healthz` |
+| health / static | ~40 | Static assets `ADAPTED` + `TESTED`; `/health`, `/healthz` `TESTED` |
 | credentials / auth | 10 | `ADAPTED` for Android ticket paths; platform auth `PLANNED` |
 | matchmaking | 5 | `ADAPTED` + `TESTED` |
 | P2P / relay / presence servers | 4 | `ADAPTED` + `TESTED` |
@@ -47,14 +47,14 @@ account-bound credentials.
 | social/profile/presence state | ~18 | Presence attributes/messages `ADAPTED` + `TESTED`; profile stats `PLANNED` |
 | saves / profile stats / UGC / news | ~25 | Saves/news/UGC binary `ADAPTED` + `TESTED`; profile stats `PLANNED` |
 | clans / leaderboards / inbox | ~17 | Clans/leaderboards `ADAPTED` + `TESTED`; inbox static `ADAPTED` + `TESTED` |
-| cloud binaries / static assets | ~30 | Cloud persistence `ADAPTED` + `TESTED`; static assets `PLANNED` |
-| Discord bot | external process | `PLANNED` |
+| cloud binaries / static assets | ~30 | Cloud persistence and static assets `ADAPTED` + `TESTED` |
+| Discord bot | external process | FastAPI groundwork `TESTED`; bot process remains external |
 
 ## Global and cloud routes
 
 | LSO method + path | Handler / storage | FastAPI status | Notes |
 | --- | --- | --- | --- |
-| `GET /healthz` | inline | `ADAPTED` | `/health` already exists; add exact alias |
+| `GET /healthz` | inline | `ADAPTED` + `TESTED` | Exact alias of `/health` |
 | `POST /gta5/11/gameservices/Complaint.asmx/WriteComplaint` | inline stub | Tranche 1 | Static status response with valid XML |
 | `POST /cloud/11/cloudservices/members/{xbl\|sc\|np}/:id/GTA5/saves/mpstats` | `saves/savefiles.js`, S3 | `ADAPTED` + `TESTED` | Multipart save write; account from authenticated credential, safe filename |
 | `GET /cloud/11/cloudservices/members/{xbl\|sc\|np}/:id/GTA5/saves/mpstats/:name` | `saves/savefiles.js`, S3 | `ADAPTED` + `TESTED` | Binary save read; account-scoped key; `DoesNotExist` XML on miss |
@@ -68,32 +68,32 @@ account-bound credentials.
 | `GET /cloud/11/cloudservices/titles/gta5/ps4/news/news.json` | `news/getNewsItems.js` | `ADAPTED` + `TESTED` | Real active/date/expire filtering from `news` |
 | `GET /cloud/11/cloudservices/global/sc/news/:storyKey/:langFile` | `news/getNewsItems.js` | `ADAPTED` + `TESTED` | Source-confirmed story shape; `langFile` compatibility no-op |
 | `GET /cloud/11/cloudservices/global/news/image/:newsId/:image` | `news/getNewsImage.js` | `ADAPTED` + `TESTED` | News bucket profile; safe key; explicit 404 text |
-| `GET /cloud/11/cloudservices/crews/sc/:clanId/publish/emblem/emblem_:size.dds` | `clans/getCrewEmblem.js` | `PLANNED` | Stored emblem resized as JPEG |
-| `GET /cloud/11/cloudservices/titles/gta5/ps4/0x1a098062.json` | static tunables | `PLANNED` | Binary/static adapter |
-| `GET /cloud/11/cloudservices/titles/gta5/pcros/0x1a098062.json` | redirect | `PLANNED` | External production redirect |
-| `GET /titles/gta5/ps2/0x1a098062.json` | static JSON | `PLANNED` | Registered twice upstream |
-| `GET /cloud/11/cloudservices/titles/gta5/xboxone/0x1a098062.json` | redirect via `ROS_HOST` | `PLANNED` | Configurable host only |
-| `GET /cloud/11/cloudservices/titles/gta5/{ps4,xboxone}/bgscripts/bg_902_0.rpf` | redirects | `PLANNED` | Duplicate upstream path; first registration wins |
-| `GET /cloud/11/cloudservices/titles/gta5/{ps4,xboxone}/extraContent/ExtraContentManifest.xml` | redirects | `PLANNED` | External production redirects |
-| `GET /cloud/11/cloudservices/titles/gta5/{ps4,xboxone}/check.json` | redirects | `PLANNED` | External production redirects |
-| `GET /cloud/11/cloudservices/titles/gta5/xbox360/news/news.json` | static news | `PLANNED` | Static file adapter |
-| `GET /cloud/11/cloudservices/titles/gta5/xbox360/0x1a098062.json` | redirect | `PLANNED` | External tunables redirect |
-| `GET /titles/gta5/ps3/0x1a098062.json` | `tunables/tunables.js` | `PLANNED` | Encrypted tunables from DB; do not copy key |
-| `GET /cloud/11/cloudservices/titles/gta5/xbox360/bgscripts/bg_900_0.rpf` | redirect | `PLANNED` | External tunables redirect |
-| `GET /cloud/11/cloudservices/titles/gta5/ps5/bgscripts/bg_ng_171_8.rpf` | static file | `PLANNED` | Served as `application/json` upstream |
-| `GET /cloud/11/cloudservices/titles/gta5/ps5/0x1a098062.json` | static file | `PLANNED` | PS5 tunables binary |
-| `GET /cloud/11/cloudservices/titles/gta5/ps5/legal/version/version_num.xml` | static file | `PLANNED` | Reads PS4 file upstream |
+| `GET /cloud/11/cloudservices/crews/sc/:clanId/publish/emblem/emblem_:size.dds` | `clans/getCrewEmblem.js` | `ADAPTED` + `TESTED` | Authenticated member/open-clan read; safe key prefix, size cap; real JPEG/PNG bytes; Pillow resize when installed |
+| `GET /cloud/11/cloudservices/titles/gta5/ps4/0x1a098062.json` | static tunables | `ADAPTED` + `TESTED` | Byte-exact 22,151 B blob with digest verification |
+| `GET /cloud/11/cloudservices/titles/gta5/pcros/0x1a098062.json` | redirect | `ADAPTED` + `TESTED` | 302 only to allowlisted HTTPS target; unconfigured returns 404 |
+| `GET /titles/gta5/ps2/0x1a098062.json` | static JSON | `ADAPTED` + `TESTED` | One handler instead of upstream duplicate registrations |
+| `GET /cloud/11/cloudservices/titles/gta5/xboxone/0x1a098062.json` | redirect via `ROS_HOST` | `ADAPTED` + `TESTED` | Local relative 302 to the PS2 blob; no host injection |
+| `GET /cloud/11/cloudservices/titles/gta5/{ps4,xboxone}/bgscripts/bg_902_0.rpf` | redirects | `ADAPTED` + `TESTED` | Exact configured 302; duplicate upstream registration dropped |
+| `GET /cloud/11/cloudservices/titles/gta5/{ps4,xboxone}/extraContent/ExtraContentManifest.xml` | redirects | `ADAPTED` + `TESTED` | Allowlisted HTTPS targets only |
+| `GET /cloud/11/cloudservices/titles/gta5/{ps4,xboxone}/check.json` | redirects | `ADAPTED` + `TESTED` | Allowlisted HTTPS targets only |
+| `GET /cloud/11/cloudservices/titles/gta5/xbox360/news/news.json` | static news | `ADAPTED` + `TESTED` | Byte-exact 255 B static list |
+| `GET /cloud/11/cloudservices/titles/gta5/xbox360/0x1a098062.json` | redirect | `ADAPTED` + `TESTED` | Configured HTTPS tunables target |
+| `GET /titles/gta5/ps3/0x1a098062.json` | `tunables/tunables.js` | `DELIBERATELY OMITTED` | Stable 501: upstream AES key/state mutation is not copied; no captured contract |
+| `GET /cloud/11/cloudservices/titles/gta5/xbox360/bgscripts/bg_900_0.rpf` | redirect | `ADAPTED` + `TESTED` | Configured HTTPS tunables target |
+| `GET /cloud/11/cloudservices/titles/gta5/ps5/bgscripts/bg_ng_171_8.rpf` | static file | `ADAPTED` + `TESTED` | Correct `application/octet-stream` instead of upstream's JSON label |
+| `GET /cloud/11/cloudservices/titles/gta5/ps5/0x1a098062.json` | static file | `ADAPTED` + `TESTED` | Byte-exact 33,427 B blob |
+| `GET /cloud/11/cloudservices/titles/gta5/ps5/legal/version/version_num.xml` | static file | `ADAPTED` + `TESTED` | Uses the source-confirmed PS4 file; explicit XML type |
 | `POST /gta5/11/gameservices/entitlements.asmx/GetSubscriptionDataPSN` | inline stub | Tranche 1 | Static active subscription XML |
-| `GET /titles/gta5/xbox360/bgscripts/bg_900_0.rpf` | static file | `PLANNED` | Static adapter |
-| `GET /titles/gta5/xbox360/extraContent/ExtraContentManifest.xml` | static file | `PLANNED` | Static adapter |
+| `GET /titles/gta5/xbox360/bgscripts/bg_900_0.rpf` | static file | `ADAPTED` + `TESTED` | Byte-exact 8,192 B RPF with digest verification |
+| `GET /titles/gta5/xbox360/extraContent/ExtraContentManifest.xml` | static file | `ADAPTED` + `TESTED` | Byte-exact 761 B manifest; explicit XML type |
 | `POST /gta5/11/gameservices/AgeAssurance.asmx/PlayerStatus` | inline stub | Tranche 1 | `NotRequired` |
-| `GET /cloud/11/cloudservices/titles/gta5/xbox360/check.json` | redirect | `PLANNED` | External tunables redirect |
-| `GET /titles/gta5/xbox360/check.json` | static file | `PLANNED` | Static adapter |
-| `GET /cloud/11/cloudservices/titles/gta5/xbox360/store/en/commerceData.xml` | redirect | `PLANNED` | External tunables redirect |
-| `GET /titles/gta5/{ps4,xbox360}/store/.../commerceData.xml` | static file | `PLANNED` | Static adapter |
-| `GET /cloud/11/cloudservices/titles/gta5/{ps4,xbox360}/store/images/editions/:image` | redirect | `PLANNED` | External production redirect |
-| `GET /cloud/11/cloudservices/titles/gta5/ps4/legal/version/version_num.xml` | static file | `PLANNED` | Static adapter |
-| `GET /cloud/11/cloudservices/members/sc/1/GTA5/{dog,car}/appnpps4.json` | inline JSON | `PLANNED` | Example payloads |
+| `GET /cloud/11/cloudservices/titles/gta5/xbox360/check.json` | redirect | `ADAPTED` + `TESTED` | Configured HTTPS tunables target |
+| `GET /titles/gta5/xbox360/check.json` | static file | `ADAPTED` + `TESTED` | Byte-exact 2 B JSON |
+| `GET /cloud/11/cloudservices/titles/gta5/xbox360/store/en/commerceData.xml` | redirect | `ADAPTED` + `TESTED` | Configured HTTPS tunables target |
+| `GET /titles/gta5/{ps4,xbox360}/store/.../commerceData.xml` | static file | `ADAPTED` + `TESTED` | Byte-exact files; explicit XML type; no `application/json` mislabelling |
+| `GET /cloud/11/cloudservices/titles/gta5/{ps4,xbox360}/store/images/editions/:image` | redirect | `ADAPTED` + `TESTED` | Strict image-name validation; allowlisted HTTPS target only |
+| `GET /cloud/11/cloudservices/titles/gta5/ps4/legal/version/version_num.xml` | static file | `ADAPTED` + `TESTED` | Same source-confirmed PS4 file as the PS5 path |
+| `GET /cloud/11/cloudservices/members/sc/1/GTA5/{dog,car}/appnpps4.json` | inline JSON | `ADAPTED` + `TESTED` | Exact source-confirmed placeholder payloads; no generated state |
 
 ## `.asmx` routers
 
@@ -162,25 +162,58 @@ These were implemented before the parity port and remain part of the matrix:
 - `Presence.asmx/GetPresenceServers`;
 - `/ros/ticket/renew`, `/ros/ticket/invalidate`.
 
-## Schema v8 tables
+## Schema v9 tables
 
-`TESTED`: schema v8 is implemented in `database.py` and covers:
+`TESTED`: schema v9 is implemented in `database.py`. It includes the v8 tables:
 
 - `news`, `social_messages` (presence-delivery style), `ugc_contents`, `ugc_mission_bookmarks`,
   `ugc_mission_playlists`, `ugc_mission_playlist_items`;
 - `tunables`, `stat_lookups`, `gen9_stat_lookups`;
 - `clans`, `clan_ranks`, `clan_memberships`, `clan_invites`, `clan_join_requests`,
   `clan_wall_messages`;
-- `active_players`, `user_ip_addresses`, `launch_verifications`;
+- `user_ip_addresses`, `launch_verifications`;
 - per-account ordered `presence_attributes` (`value_type`, `value_text`,
   `sort_order`) and `users.primary_clan_id` for primary-clan state.
 
+`TESTED`: v9 adds `UNIQUE (rockstar_id, platform)` to `active_players` and a
+`(platform, last_seen)` index. The v8→v9 migration rebuilds the table in place,
+keeps the newest `MAX(last_seen)` observation per account/platform pair, and is
+idempotent. `database.touch_active_player()` only writes allowlisted platforms
+(`PS4`, `PS5`, `XBOX360`, `XBOXONE`, `PCROS`) and positive account ids.
+
+`TESTED`: `native_requests.require_user()` is the single writer for native
+observations. After successful authentication it upserts the caller using the
+validated `Platform` field/header. Missing or unknown platforms are ignored, and
+a bookkeeping failure never changes the authentication decision. Authenticated
+`Presence.asmx/Query` refreshes its caller's row before reading, matching the
+source-confirmed upstream order.
+
+`TESTED`: `database.active_player_counts()` returns real per-platform counts
+within a configurable window (default 600 seconds) and a total. Unknown
+platforms are excluded. No fabricated or cached online count is stored.
+
 `TESTED`: the local/S3-compatible adapter in `object_storage.py` validates every
 key component, scopes saves and shares to the authenticated internal account id,
-and keeps separate bucket profiles for UGC and news. S3 credentials and the
-photo-upload HMAC secret are environment-only. No production bucket names,
+and keeps separate bucket profiles for UGC, news and emblems. S3 credentials and
+the photo-upload HMAC secret are environment-only. No production bucket names,
 credentials, or hardcoded encryption keys were copied into the repository.
 
-`UNVERIFIED`: the Android client has not yet been observed calling these cloud
-routes. Upstream RC4 response framing is deliberately not ported; native
-authentication uses the existing ticket/session-ticket plumbing.
+`ADAPTED` + `TESTED`: static assets are vendored byte-exact under
+`gwsc_local_termux/static/` with SHA-256 and size verification in
+`static_assets.py`. Opaque tunables/RPF bytes are never parsed, decrypted or
+logged. Static redirects require an HTTPS base URL and a hostname in the
+configured allowlist; unconfigured targets return 404 and misconfigured targets
+return 500 without echoing configuration. Crew emblems require an authenticated
+member or an open clan, a restricted `emblems/` key prefix, a size cap and
+JPEG/PNG magic checks. Pillow resizes when installed; otherwise verified source
+bytes are served unchanged.
+
+`TESTED`: Discord support is groundwork only. FastAPI does not read a Discord
+token or publish a Discord endpoint; it exposes inert, non-secret configuration
+placeholders, the real `active_player_counts()` data source, and log redaction
+for Discord credentials. The upstream bot remains a separate external process.
+
+`UNVERIFIED`: the Android client has not yet been observed calling these cloud,
+static, emblem or native active-player paths, and no successful Android Discord
+integration has been captured. Upstream RC4 response framing is deliberately not
+ported; native authentication uses the existing ticket/session-ticket plumbing.

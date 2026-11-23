@@ -13,7 +13,7 @@ from xml.etree import ElementTree as ET
 
 from fastapi import Request, Response
 
-from . import config
+from . import config, database
 from .auth import authenticate_native_request
 from .xml_protocol import XML_CONTENT_TYPE, error_xml
 
@@ -122,6 +122,32 @@ def native_user(
     )
 
 
+def _record_native_activity(
+    request: Request, values: Dict[str, str], user: Dict[str, Any]
+) -> None:
+    """Mirror upstream's authenticated ActivePlayer upsert.
+
+    ``ADAPTED``: upstream feeds active-player rows from the decoded ROS
+    user-agent inside its encryption middleware.  This project's native
+    authentication already exposes a validated platform field/header, so we
+    use that instead.  Missing or unknown platforms are simply not recorded;
+    a bookkeeping failure must never change the authentication decision.
+    """
+    platform = field(values, "Platform", "platform") or request.headers.get("platform")
+    if not platform:
+        return
+    conn = None
+    try:
+        conn = database.get_db()
+        with conn:
+            database.touch_active_player(conn, user.get("rockstar_id"), platform)
+    except Exception:
+        log.warning("Could not record native active-player observation")
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def require_user(
     request: Request,
     values: Dict[str, str],
@@ -132,6 +158,7 @@ def require_user(
     user = native_user(request, values, allow_ticket_field=allow_ticket_field)
     if not user or user.get("status") != "active":
         return None
+    _record_native_activity(request, values, user)
     return user
 
 
