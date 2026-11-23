@@ -106,6 +106,20 @@ ASSETS: Dict[str, StaticAsset] = {
         "8c0e255a045af601d776ec7a344631305a2bdb948b7c0deb850c2337bdd67bb4",
         "application/xml",
     ),
+    # SOURCE_CONFIRMED: QueryContent returns these verbatim for the two legacy
+    # heist trigger IDs.  They are static catalog data, not user content.
+    "heists1": StaticAsset(
+        "Heists1.xml",
+        12726,
+        "4bbf757913b98ec14843fa320c90c152d99e4893869699f041e60bf6631c41e4",
+        "application/xml",
+    ),
+    "heists2": StaticAsset(
+        "Heists2.xml",
+        17664,
+        "c4d9c49eba716486bf359c745eadcaf88fd94f755b924f99f985ff3607bc461f",
+        "application/xml",
+    ),
 }
 
 _CACHE: Dict[str, bytes] = {}

@@ -45,7 +45,7 @@ account-bound credentials.
 | P2P / relay / presence servers | 4 | `ADAPTED` + `TESTED` |
 | stateless `.asmx` services | ~18 | Tranche 1 + `TESTED` |
 | social/profile/presence state | ~18 | Presence attributes/messages `ADAPTED` + `TESTED`; profile stats `PLANNED` |
-| saves / profile stats / UGC / news | ~25 | Saves/news/UGC binary `ADAPTED` + `TESTED`; profile stats `PLANNED` |
+| saves / profile stats / UGC / news | ~25 | Saves/news/UGC binary and UGC lifecycle `ADAPTED` + `TESTED`; profile stats `PLANNED` |
 | clans / leaderboards / inbox | ~17 | Clans/leaderboards `ADAPTED` + `TESTED`; inbox static `ADAPTED` + `TESTED` |
 | cloud binaries / static assets | ~30 | Cloud persistence and static assets `ADAPTED` + `TESTED` |
 | Discord bot | external process | FastAPI groundwork `TESTED`; bot process remains external |
@@ -145,9 +145,9 @@ account-bound credentials.
 | `POST telemetry.asmx/GetTelemetryClientConfig` | static | Tranche 1 | Config attributes on root |
 | `POST telemetry.asmx/SubmitCompressed` | compressed log | Tranche 1 | Validate/decompress bounded payload, no log body |
 | `POST ugc.asmx/CheckText` | static | Tranche 1 | Shared with Social Club |
-| `POST ugc.asmx/CreateContent\|UpdateContent` | UGC DB + S3 | `PLANNED` | Custom multipart binary |
-| `POST ugc.asmx/Publish\|SetDeleted` | UGC DB | `PLANNED` | Ownership checks |
-| `POST ugc.asmx/QueryContent` | UGC DB + static heists | `PLANNED` | JSON5 query params |
+| `POST ugc.asmx/CreateContent\|UpdateContent` | `ugc_contents` + UGC object store | `ADAPTED` + `TESTED` | Source-confirmed `&data=` big-endian frames; server-generated base64url ids; strict bounds; owner-only updates |
+| `POST ugc.asmx/Publish\|SetDeleted` | `ugc_contents` | `ADAPTED` + `TESTED` | Publish unpublishes siblings; SetDeleted is a soft unpublish with owner check (upstream had none) |
+| `POST ugc.asmx/QueryContent` | `ugc_contents`, bookmarks, static heists | `ADAPTED` + `TESTED` | Bounded JSON5-like params; published-or-owner reads; byte-exact heist XML for the two source-confirmed triggers; unknown query returns `Status=0` |
 
 ## Existing native routes already adapted
 
@@ -207,6 +207,18 @@ return 500 without echoing configuration. Crew emblems require an authenticated
 member or an open clan, a restricted `emblems/` key prefix, a size cap and
 JPEG/PNG magic checks. Pillow resizes when installed; otherwise verified source
 bytes are served unchanged.
+
+`ADAPTED` + `TESTED`: `routes/lso_ugc.py` implements the five UGC lifecycle
+methods. The source-confirmed `&data=` frame decoder is bounded by file count,
+file size and total body size; trailing garbage is rejected. Ids are 16 random
+bytes in base64url form and are generated server-side. Ownership comes only from
+the authenticated account: Update/Publish/SetDeleted reject non-owners, and
+public QueryContent filters hide unpublished rows. Publish unpublishes sibling
+versions of the same root id; SetDeleted performs the source-confirmed soft
+unpublish instead of upstream's unverified blanket success response. Photo
+create metadata uses a configured HTTPS base URL plus a short-lived HMAC upload
+token and never trusts the request `Host` header. The two source-confirmed heist
+trigger ids return byte-exact digest-pinned XML from `gwsc_local_termux/static/`.
 
 `TESTED`: Discord support is groundwork only. FastAPI does not read a Discord
 token or publish a Discord endpoint; it exposes inert, non-secret configuration

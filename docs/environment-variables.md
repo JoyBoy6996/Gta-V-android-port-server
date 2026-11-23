@@ -57,11 +57,15 @@ enabled. `*.pem` and `*.key` are gitignored.
 | `GWSC_OBJECT_MAX_BYTES` | `26214400` | Maximum stored object and cloud upload body size (25 MiB). |
 | `GWSC_PHOTO_UPLOAD_SECRET` | *(empty)* | Dedicated HMAC secret for UGC photo upload tokens. Required for uploads; never reused as a database password. |
 | `GWSC_PHOTO_UPLOAD_TOKEN_TTL` | `900` | Photo upload token lifetime in seconds. |
+| `GWSC_UGC_PUBLIC_BASE_URL` | *(empty)* | HTTPS base URL written into UGC photo create metadata as `cdnurl`. Falls back to `https://GWSC_PUBLIC_HOST`; never taken from the request `Host`. |
 
 Cloud upload paths (`/cloud/11/cloudservices/members/...`,
-`/cloud/11/cloudservices/ugc/gta5photo/upload/...` and `/ugc/gta5photo/...`)
-use `GWSC_OBJECT_MAX_BYTES` instead of `GWSC_MAX_BODY_BYTES`; all other routes
-keep the smaller REST limit.
+`/cloud/11/cloudservices/ugc/gta5photo/upload/...`, `/ugc/gta5photo/...` and
+UGC `CreateContent`/`UpdateContent`, which carry inline binary frames) use
+`GWSC_OBJECT_MAX_BYTES` instead of `GWSC_MAX_BODY_BYTES`; all other routes keep
+the smaller REST limit. The photo metadata URL must be an HTTPS base URL with
+no path, query, fragment or credentials; an invalid value fails the create
+request instead of emitting a client-controlled URL.
 
 ## Static assets and redirects
 

@@ -187,6 +187,7 @@ from .routes.info import router as info_router  # noqa: E402
 from .routes.lso import router as lso_router  # noqa: E402
 from .routes.lso_cloud import router as lso_cloud_router  # noqa: E402
 from .routes.lso_static import router as lso_static_router  # noqa: E402
+from .routes.lso_ugc import router as lso_ugc_router  # noqa: E402
 from .routes.messages import router as messages_router  # noqa: E402
 from .routes.profile import router as profile_router  # noqa: E402
 from .routes.relay import router as relay_router  # noqa: E402
@@ -206,6 +207,7 @@ app.include_router(game_launch_router)
 app.include_router(lso_static_router)
 app.include_router(lso_cloud_router)
 app.include_router(lso_router)
+app.include_router(lso_ugc_router)
 app.include_router(ros_router)
 
 

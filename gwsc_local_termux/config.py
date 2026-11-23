@@ -132,6 +132,10 @@ NEWS_OBJECT_STORAGE_BUCKET = (
 UGC_DEFAULT_PHOTO_KEY = (
     os.getenv("GWSC_UGC_DEFAULT_PHOTO_KEY", "").strip() or "default_01.ugc"
 )
+# Public HTTPS base used in gta5photo create metadata.  Upstream falls back to
+# the request Host header; this port never trusts that value.  Empty means the
+# metadata field is empty until an operator configures the CDN base.
+UGC_PUBLIC_BASE_URL = os.getenv("GWSC_UGC_PUBLIC_BASE_URL", "").strip()
 # LSO caps photo uploads at 25 MiB; save files and other binaries use the same
 # boundary until per-route limits are source-confirmed.
 OBJECT_MAX_BYTES = _env_int("GWSC_OBJECT_MAX_BYTES", 25 * 1024 * 1024)
@@ -141,6 +145,9 @@ CLOUD_UPLOAD_PATH_PREFIXES = (
     "/cloud/11/cloudservices/members/",
     "/cloud/11/cloudservices/ugc/gta5photo/upload/",
     "/ugc/gta5photo/",
+    # UGC Create/Update carry inline binary frames after ``&data=``.
+    "/gta5/11/gameservices/ugc.asmx/CreateContent",
+    "/gta5/11/gameservices/ugc.asmx/UpdateContent",
 )
 # Separate HMAC secret for UGC photo upload tokens.  It must not be reused as
 # a database password or any other credential.

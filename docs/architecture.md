@@ -42,7 +42,8 @@ wire contract is still `UNVERIFIED`; see
                        |   info  auth  profile     |
                        |   friends messages        |
                        |   sharkcards events       |
-                       |   lso lso_cloud lso_static|
+                       | lso lso_cloud lso_static |
+                       |   lso_ugc                |
                        |   relay  ros              |
                        +------------+--------------+
                                     |
@@ -82,6 +83,7 @@ wire contract is still `UNVERIFIED`; see
 | `backup.py` | SQLite online backup/restore with integrity checks. |
 | `generate_certs.py` | Self-signed TLS certificate with SANs for local/LAN hosts. |
 | `routes/lso.py`, `routes/lso_cloud.py`, `routes/lso_static.py` | LSO parity services: stateless/social/clan, S3-backed cloud routes, byte-exact static assets and safe redirects. |
+| `routes/lso_ugc.py` | UGC content lifecycle: bounded `&data=` frame decoder, account-bound create/update/publish/delete/query, digest-pinned heist XML and photo metadata. |
 | `routes/*.py` | Other HTTP and native endpoint handlers. |
 
 ## Request pipeline
