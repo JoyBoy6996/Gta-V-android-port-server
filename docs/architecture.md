@@ -85,6 +85,7 @@ wire contract is still `UNVERIFIED`; see
 | `routes/lso.py`, `routes/lso_cloud.py`, `routes/lso_static.py` | LSO parity services: stateless/social/clan, S3-backed cloud routes, byte-exact static assets and safe redirects. |
 | `routes/lso_ugc.py` | UGC content lifecycle: bounded `&data=` frame decoder, account-bound create/update/publish/delete/query, digest-pinned heist XML and photo metadata. |
 | `routes/lso_stats.py` | ProfileStats: account-scoped reads/writes, seeded lookup allowlist, strict binary codecs and pinned ResetStats XML. |
+| `routes/lso_save_migration.py` | Authenticated SaveMigration stubs with source-confirmed XML and no session-key or timestamp leakage. |
 | `profile_stats_codec.py`, `profile_stats_store.py`, `stat_seeds.py` | Synthetic-vector-tested binary codecs, account-scoped stat blob storage and the opt-in local seed-definition importer. |
 | `routes/*.py` | Other HTTP and native endpoint handlers. |
 

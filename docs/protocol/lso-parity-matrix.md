@@ -140,8 +140,8 @@ account-bound credentials.
 | `POST ProfileStats.asmx/ReadStatsByGroups` | account stat blob + lookup | `ADAPTED` + `TESTED` | Signed BE group ids; PS5 uses `gen9_stat_lookups`; only stored values returned |
 | `POST ProfileStats.asmx/WriteStats` | account stat blob + lookup | `ADAPTED` + `TESTED` | Bounded raw-DEFLATE parse; seeded allowlist; skips server-authoritative/fabricated-time ids |
 | `POST ProfileStats.asmx/ResetStats` | static | `ADAPTED` + `TESTED` | Exact source-confirmed XML; lowercase `count` attribute |
-| `POST SaveMigration.asmx/GetSourceAccountsMP` | static | `PLANNED` | Empty accounts |
-| `POST SaveMigrationSingleplayer.asmx/GetUploadedSingleplayerSaveMetadata` | session key | `PLANNED` | Never return raw keys |
+| `POST SaveMigration.asmx/GetSourceAccountsMP` | static | `ADAPTED` + `TESTED` | Source-confirmed empty-accounts XML; authenticated |
+| `POST SaveMigrationSingleplayer.asmx/GetUploadedSingleplayerSaveMetadata` | authenticated account | `ADAPTED` + `TESTED` | Same element order; empty token instead of raw `SessionKey`; no fabricated times |
 | `POST telemetry.asmx/GetTelemetryClientConfig` | static | Tranche 1 | Config attributes on root |
 | `POST telemetry.asmx/SubmitCompressed` | compressed log | Tranche 1 | Validate/decompress bounded payload, no log body |
 | `POST ugc.asmx/CheckText` | static | Tranche 1 | Shared with Social Club |
@@ -208,6 +208,15 @@ member or an open clan, a restricted `emblems/` key prefix, a size cap and
 JPEG/PNG magic checks. Pillow resizes when installed; otherwise verified source
 bytes are served unchanged.
 
+`ADAPTED` + `TESTED`: `routes/lso_save_migration.py` implements the two
+SaveMigration stubs with the source-confirmed bare method namespaces and
+`Status`-last element order. `GetSourceAccountsMP` returns the constant empty
+`<Accounts>` result. The singleplayer handler keeps the real authenticated
+rockstar id but emits an empty `SaveMigrationRecordToken`: upstream's value is
+the raw RC4 session key and is never reproduced. Its two timestamps are neutral
+zero sentinels, not request-time values dressed up as a real save upload.
+Neither handler reads a body, S3 object or other account's data.
+
 `ADAPTED` + `TESTED`: `routes/lso_ugc.py` implements the five UGC lifecycle
 methods. The source-confirmed `&data=` frame decoder is bounded by file count,
 file size and total body size; trailing garbage is rejected. Ids are 16 random
@@ -225,8 +234,10 @@ methods with the source-confirmed XML namespaces and binary layouts. Stat
 definitions come only from the opt-in `stat_seeds.py` importer, which decodes the
 two upstream metadata snapshots locally, normalises the 65 hex-prefixed legacy
 hashes correctly, preserves all 24 fields and verifies the documented counts and
-Gen9-subset relationship before an atomic table replacement. The codec uses
-synthetic-vector tests only; no player blob is vendored. Reads return only real
+Gen9-subset relationship before an atomic table replacement. `OBSERVED`: the
+importer was exercised read-only against the real upstream snapshots and
+matched 40,849/28,401 rows, the Gen9 subset, and all 65 hex-prefixed legacy
+hashes. The codec uses synthetic-vector tests only; no player blob is vendored. Reads return only real
 stored values for the authenticated account's validated platform: no zero-fill,
 no current-time overrides, and no arbitrary gamer handles. Writes are bounded,
 accept only seeded ids whose type matches, skip server-authoritative and the

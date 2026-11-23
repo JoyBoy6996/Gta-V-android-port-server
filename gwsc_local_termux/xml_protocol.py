@@ -120,6 +120,23 @@ def lso_response_xml(
     return _serialise(root)
 
 
+def bare_method_response_xml(
+    xmlns: str, payload: Iterable[ET.Element], *, status: int = 1
+) -> str:
+    """Build ``<Response xmlns="MethodName">...<Status>1</Status></Response>``.
+
+    ``SOURCE_CONFIRMED``: SaveMigration stubs emit a bare method-name
+    namespace, no xsd/xsi attributes and ``Status`` *after* the payload.  This
+    is intentionally separate from :func:`plain_response_xml` (status first).
+    """
+    root = _element(
+        "Response",
+        attributes={"xmlns": xmlns},
+        children=[*list(payload), _element("Status", str(status))],
+    )
+    return _serialise(root)
+
+
 def cloud_status_xml(*, status: int = 1, ms: str = "0") -> str:
     """Build the well-formed equivalent of LSO's cloud save status string.
 
