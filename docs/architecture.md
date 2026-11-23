@@ -66,7 +66,7 @@ wire contract is still `UNVERIFIED`; see
 | --- | --- |
 | `server.py` | App assembly, middleware order, lifespan, exception handlers, `/` and `/health`. |
 | `config.py` | Every environment variable and default. Read once at import. |
-| `database.py` | Schema (`SCHEMA_VERSION = 6`), connection defaults, forward-only migrations. |
+| `database.py` | Schema (`SCHEMA_VERSION = 8`), connection defaults, forward-only migrations. |
 | `auth.py` | Opaque token creation/lookup, expiry/revocation, FastAPI dependencies, native credential resolution. |
 | `security.py` | PBKDF2 password hashing, SHA-256 token/ticket hashing, random token generation, process-local rate limiter. |
 | `presence.py` | Heartbeat/expiry-based online state and the real online count. |

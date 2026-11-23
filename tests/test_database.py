@@ -16,11 +16,26 @@ def test_fresh_database_has_current_schema(client):
         assert "created_by" in _columns(conn, "conversations")
         assert "state" in _columns(conn, "game_sessions")
         assert "achievement_id" in _columns(conn, "achievements")
+        assert "primary_clan_id" in _columns(conn, "users")
+        assert "sort_order" in _columns(conn, "presence_attributes")
+        for table in (
+            "presence_attributes",
+            "social_messages",
+            "clans",
+            "clan_memberships",
+            "ugc_contents",
+            "news",
+            "stat_lookups",
+        ):
+            assert conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
+                (table,),
+            ).fetchone()[0] == 1
         versions = {
             row[0]
             for row in conn.execute("SELECT version FROM schema_migrations").fetchall()
         }
-        assert {2, 3, 4, 5, 6}.issubset(versions)
+        assert {2, 3, 4, 5, 6, 7, 8}.issubset(versions)
 
 
 def test_legacy_database_is_migrated(tmp_path):
@@ -92,3 +107,16 @@ def test_legacy_database_is_migrated(tmp_path):
 
         # A legacy database without an achievements table must gain one.
         assert "achievement_id" in _columns(migrated, "achievements")
+
+        # Schema v8 adds the LSO parity social/content tables.
+        assert "value_type" in _columns(migrated, "presence_attributes")
+        assert "sort_order" in _columns(migrated, "presence_attributes")
+        assert "primary_clan_id" in _columns(migrated, "users")
+        assert "delivered_at" in _columns(migrated, "social_messages")
+        assert "rank_id" in _columns(migrated, "clan_memberships")
+        assert "is_published" in _columns(migrated, "ugc_contents")
+        versions = {
+            row[0]
+            for row in migrated.execute("SELECT version FROM schema_migrations").fetchall()
+        }
+        assert 8 in versions

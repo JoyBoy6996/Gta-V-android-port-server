@@ -16,7 +16,7 @@ from .time_utils import now_iso
 
 log = logging.getLogger("gwsc.database")
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 BASE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
     avatar TEXT DEFAULT 'preset_0',
     crew_tag TEXT DEFAULT '',
     bio TEXT DEFAULT '',
+    primary_clan_id INTEGER,
     status TEXT NOT NULL DEFAULT 'active',
     is_online INTEGER NOT NULL DEFAULT 0,
     in_gtao INTEGER NOT NULL DEFAULT 0,
@@ -192,6 +193,213 @@ CREATE TABLE IF NOT EXISTS account_status_history (
     changed_at TEXT NOT NULL
 );
 
+-- Version 8: LSO parity social, content and platform state.
+CREATE TABLE IF NOT EXISTS presence_attributes (
+    account_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    value_type TEXT NOT NULL DEFAULT 'string',
+    value_text TEXT,
+    value_base64 TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (account_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS social_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_account_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_account_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    delivered_at TEXT,
+    metadata TEXT DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS clans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    motto TEXT DEFAULT '',
+    colors TEXT DEFAULT 'Black',
+    is_system_clan INTEGER NOT NULL DEFAULT 0,
+    is_open_clan INTEGER NOT NULL DEFAULT 0,
+    is_verified_clan INTEGER NOT NULL DEFAULT 0,
+    emblem_path TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS clan_ranks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    rank_order INTEGER NOT NULL DEFAULT 0,
+    system_flags INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS clan_memberships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+    rank_id INTEGER REFERENCES clan_ranks(id) ON DELETE SET NULL,
+    joined_at TEXT NOT NULL,
+    updated_at TEXT,
+    UNIQUE (user_id, clan_id)
+);
+
+CREATE TABLE IF NOT EXISTS clan_invites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+    inviter_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    invitee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    message TEXT DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS clan_join_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+    requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS clan_wall_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    clan_id INTEGER NOT NULL REFERENCES clans(id) ON DELETE CASCADE,
+    writer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS news (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    story_key TEXT,
+    types TEXT DEFAULT '',
+    date TEXT,
+    expire TEXT,
+    title TEXT DEFAULT '',
+    headline TEXT DEFAULT '',
+    subtitle TEXT DEFAULT '',
+    content TEXT DEFAULT '',
+    url TEXT DEFAULT '',
+    style TEXT DEFAULT '',
+    priority INTEGER DEFAULT 0,
+    secondary_priority INTEGER DEFAULT 0,
+    tracking_id TEXT DEFAULT '',
+    image_path TEXT DEFAULT '',
+    image_filesize INTEGER DEFAULT 0,
+    image_type TEXT DEFAULT '',
+    extra_data TEXT DEFAULT '{}',
+    language TEXT DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ugc_contents (
+    content_id TEXT PRIMARY KEY,
+    root_content_id TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    data TEXT DEFAULT '',
+    category TEXT DEFAULT '',
+    file_version0 TEXT DEFAULT '',
+    file_version1 TEXT DEFAULT '',
+    file_version2 TEXT DEFAULT '',
+    language TEXT DEFAULT '',
+    username TEXT DEFAULT '',
+    name TEXT DEFAULT '',
+    account_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    rockstar_id INTEGER,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_date TEXT NOT NULL,
+    published_date TEXT,
+    updated_date TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    is_verified INTEGER NOT NULL DEFAULT 0,
+    is_legacy INTEGER NOT NULL DEFAULT 0,
+    is_published INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS ugc_mission_bookmarks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content_id TEXT NOT NULL REFERENCES ugc_contents(content_id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    UNIQUE (user_id, content_id)
+);
+
+CREATE TABLE IF NOT EXISTS ugc_mission_playlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ugc_mission_playlist_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    playlist_id INTEGER NOT NULL REFERENCES ugc_mission_playlists(id) ON DELETE CASCADE,
+    content_id TEXT NOT NULL REFERENCES ugc_contents(content_id) ON DELETE CASCADE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    added_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tunables (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'string',
+    value TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    is_global INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS stat_lookups (
+    hash TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT DEFAULT '',
+    raw_type TEXT DEFAULT '',
+    category TEXT DEFAULT '',
+    group_name TEXT DEFAULT '',
+    flags TEXT DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS gen9_stat_lookups (
+    hash TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT DEFAULT '',
+    raw_type TEXT DEFAULT '',
+    category TEXT DEFAULT '',
+    group_name TEXT DEFAULT '',
+    flags TEXT DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS active_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rockstar_id INTEGER NOT NULL,
+    platform TEXT NOT NULL DEFAULT '',
+    last_seen TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_ip_addresses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ip_address TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS launch_verifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    console_id TEXT DEFAULT '',
+    ip_address TEXT DEFAULT '',
+    verification_code TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL
@@ -316,6 +524,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "game_sessions", "expires_at", "TEXT")
     _record_version(conn, 7)
 
+    # --- Version 8: LSO parity social, content and platform state ----------
+    # BASE_SCHEMA is executed before every migration pass, so the new tables
+    # already exist for fresh and legacy databases alike.  The column checks
+    # also cover databases created by an earlier v8 work-in-progress build.
+    _ensure_column(conn, "users", "primary_clan_id", "INTEGER")
+    _ensure_column(
+        conn, "presence_attributes", "sort_order", "INTEGER NOT NULL DEFAULT 0"
+    )
+    _record_version(conn, 8)
+
     # Indexes are created by BASE_SCHEMA, but older databases need them too.
     conn.executescript(
         """
@@ -338,6 +556,19 @@ def _migrate(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_tickets_expiry ON service_tickets(expires_at);
         CREATE INDEX IF NOT EXISTS idx_relay_session ON relay_peers(session_id);
         CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_presence_attr_account ON presence_attributes(account_id);
+        CREATE INDEX IF NOT EXISTS idx_social_messages_recipient ON social_messages(recipient_account_id, delivered_at);
+        CREATE INDEX IF NOT EXISTS idx_social_messages_sender ON social_messages(sender_account_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_clan_memberships_user ON clan_memberships(user_id, clan_id);
+        CREATE INDEX IF NOT EXISTS idx_clan_memberships_clan ON clan_memberships(clan_id);
+        CREATE INDEX IF NOT EXISTS idx_clan_invites_invitee ON clan_invites(invitee_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_news_active ON news(active, date, expire);
+        CREATE INDEX IF NOT EXISTS idx_ugc_published ON ugc_contents(is_published, published_date);
+        CREATE INDEX IF NOT EXISTS idx_ugc_owner ON ugc_contents(user_id, content_id);
+        CREATE INDEX IF NOT EXISTS idx_ugc_bookmarks_user ON ugc_mission_bookmarks(user_id, content_id);
+        CREATE INDEX IF NOT EXISTS idx_active_players_lookup ON active_players(rockstar_id, platform);
+        CREATE INDEX IF NOT EXISTS idx_user_ips_user ON user_ip_addresses(user_id, last_seen_at);
+        CREATE INDEX IF NOT EXISTS idx_launch_verifications_user ON launch_verifications(user_id, expires_at);
         """
     )
 

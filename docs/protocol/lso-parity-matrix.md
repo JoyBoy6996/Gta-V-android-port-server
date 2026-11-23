@@ -43,10 +43,10 @@ account-bound credentials.
 | credentials / auth | 10 | `ADAPTED` for Android ticket paths; platform auth `PLANNED` |
 | matchmaking | 5 | `ADAPTED` + `TESTED` |
 | P2P / relay / presence servers | 4 | `ADAPTED` + `TESTED` |
-| stateless `.asmx` services | ~18 | Tranche 1 of this port |
-| social/profile/presence state | ~18 | `PLANNED` |
+| stateless `.asmx` services | ~18 | Tranche 1 + `TESTED` |
+| social/profile/presence state | ~18 | Presence attributes/messages `ADAPTED` + `TESTED`; profile stats `PLANNED` |
 | saves / profile stats / UGC / news | ~25 | `PLANNED` |
-| clans / leaderboards / inbox | ~17 | `PLANNED` |
+| clans / leaderboards / inbox | ~17 | Clans/leaderboards `ADAPTED` + `TESTED`; inbox static `ADAPTED` + `TESTED` |
 | cloud binaries / static assets | ~30 | `PLANNED` |
 | Discord bot | external process | `PLANNED` |
 
@@ -112,12 +112,13 @@ account-bound credentials.
 | `POST auth.asmx/CreateTicketSc3` etc. | PC credentials | `ADAPTED` + `TESTED` | Android paths; no plaintext password transport |
 | `POST CashTransactions.asmx/GetPackValueUSDE` | static catalog | Tranche 1 | 29 public packs |
 | `POST CashTransactions.asmx/GetLegalTerritoryRestrictions` | static | Tranche 1 | Casino restrictions |
-| `POST Clans.asmx/GetInvites` | `ClanInvite` DB | `PLANNED` | Needs clan schema v8+ |
-| `POST Clans.asmx/SetPrimaryClan` | `ClanMembership` DB | `PLANNED` | Membership check required |
-| `POST Clans.asmx/GetPrimaryClans` | inline | `PLANNED` | Hardcoded upstream member |
-| `POST Clans.asmx/GetMetadataForClan` | inline | `PLANNED` | Static metadata |
-| `POST Clans.asmx/GetMine` | `ClanMembership` DB | `PLANNED` | Member counts |
-| `POST Clans.asmx/GetDesc` | `Clan` DB | `PLANNED` | Membership-scoped |
+| `POST Clans.asmx/GetInvites` | `ClanInvite` DB | `ADAPTED` + `TESTED` | Real account-scoped invites; corrected XML escaping |
+| `POST Clans.asmx/SetPrimaryClan` | `ClanMembership` DB | `ADAPTED` + `TESTED` | Membership check required; strict positive `clanId` |
+| `POST Clans.asmx/GetPrimaryClans` | inline | `ADAPTED` + `TESTED` | Derived from `users.primary_clan_id`, not hardcoded |
+| `POST Clans.asmx/GetMetadataForClan` | inline | `ADAPTED` + `TESTED` | Static metadata with upstream `ms=15` |
+| `POST Clans.asmx/GetMine` | `ClanMembership` DB | `ADAPTED` + `TESTED` | Real member counts and primary flag |
+| `POST Clans.asmx/GetDesc` | `Clan` DB | `ADAPTED` + `TESTED` | Real `IsSystemClan` value; empty list when absent |
+| `POST Leaderboards.asmx/ReadByCrews` | inline empty result | `ADAPTED` + `TESTED` | Bare XML root with lowercase `count`/`total` |
 | `POST GeoLocation.asmx/GetRelayServers` | relay keys | `ADAPTED` + `TESTED` | Signed host |
 | `POST GeoLocation.asmx/GetLocationInfoFromIP` | same handler | `ADAPTED` + `TESTED` | Alias |
 | `POST Inbox.asmx/GetUnreadMessages` | static | Tranche 1 | Empty inbox |
@@ -127,14 +128,14 @@ account-bound credentials.
 | `POST licenseplates.asmx/IsValid` | static | Tranche 1 | Always valid upstream |
 | `POST Presence.asmx/GetPresenceServers` | relay config | `ADAPTED` + `TESTED` | Host-only, no signature |
 | `POST Presence.asmx/Publish` | no-op | Tranche 1 | Validated status response |
-| `POST Presence.asmx/MultiPostMessage` | `Messages` DB | `PLANNED` | Non-RC4 upstream; add schema v8 |
+| `POST Presence.asmx/MultiPostMessage` | `social_messages` DB | `ADAPTED` + `TESTED` | Authenticated sender; quoted recipients resolved to accounts |
 | `POST Presence.asmx/PostMessageToRecipients` | no-op | Tranche 1 | Validated status response |
-| `POST Presence.asmx/GetAttributes` | `PresenceAttributes` | `PLANNED` | Needs attribute store |
+| `POST Presence.asmx/GetAttributes` | `presence_attributes` DB | `ADAPTED` + `TESTED` | Exact `GetAttributes` CSV shape; account-bound handle lookup |
 | `POST Presence.asmx/GetAttributesForGamers` | no-op | Tranche 1 | Validated status response |
 | `POST Presence.asmx/Subscribe\|Unsubscribe\|SignOut` | no-op | Tranche 1 | Validated status responses |
-| `POST Presence.asmx/GetMessages` | `Messages` DB | `PLANNED` | Marks delivered |
-| `POST Presence.asmx/Query\|QueryWithMaxRecordLength` | attributes/active player | `PLANNED` | Session and crewmate queries |
-| `POST Presence.asmx/SetAttributes\|ReplaceAttributes` | attributes | `PLANNED` | Binary/string serialization |
+| `POST Presence.asmx/GetMessages` | `social_messages` DB | `ADAPTED` + `TESTED` | Real count/timestamp; marks delivered in one transaction |
+| `POST Presence.asmx/Query\|QueryWithMaxRecordLength` | attributes/active player | `ADAPTED` + `TESTED` | One canonical `PresenceQueryResponse`; 5-minute cutoff, cap 10 |
+| `POST Presence.asmx/SetAttributes\|ReplaceAttributes` | `presence_attributes` DB | `ADAPTED` + `TESTED` | Literal comma-split triples; reject non-triples; account-scoped |
 | `POST ProfileStats.asmx/ReadStatsByGamer2` | stats S3 + lookup | `PLANNED` | Packed binary stats |
 | `POST ProfileStats.asmx/ReadStatsByGroups` | stats S3 + lookup | `PLANNED` | PS5 uses `Gen9StatLookup` |
 | `POST ProfileStats.asmx/WriteStats` | stats S3 | `PLANNED` | Merge custom binary format |
@@ -161,18 +162,18 @@ These were implemented before the parity port and remain part of the matrix:
 - `Presence.asmx/GetPresenceServers`;
 - `/ros/ticket/renew`, `/ros/ticket/invalidate`.
 
-## Planned schema v8+ tables
+## Schema v8 tables
 
-Upstream Prisma models that have no FastAPI equivalent yet:
+`TESTED`: schema v8 is implemented in `database.py` and covers:
 
-- `news`, `messages` (presence-delivery style), `ugc`, `ugc_mission_bookmarks`,
+- `news`, `social_messages` (presence-delivery style), `ugc_contents`, `ugc_mission_bookmarks`,
   `ugc_mission_playlists`, `ugc_mission_playlist_items`;
 - `tunables`, `stat_lookups`, `gen9_stat_lookups`;
 - `clans`, `clan_ranks`, `clan_memberships`, `clan_invites`, `clan_join_requests`,
   `clan_wall_messages`;
 - `active_players`, `user_ip_addresses`, `launch_verifications`;
-- per-account `presence_attributes` if the simple `metadata` column is
-  insufficient for binary/string typed attributes.
+- per-account ordered `presence_attributes` (`value_type`, `value_text`,
+  `sort_order`) and `users.primary_clan_id` for primary-clan state.
 
 Object storage adapters (S3-compatible, local filesystem fallback) are needed
 for saves, profile stats, UGC, news images, and crew emblems. No production

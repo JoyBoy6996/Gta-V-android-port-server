@@ -120,6 +120,22 @@ def lso_response_xml(
     return _serialise(root)
 
 
+def plain_response_xml(children: Iterable[ET.Element], *, status: int = 1) -> str:
+    """Build a bare LSO ``<Response>`` without schema namespace attributes.
+
+    ``SOURCE_CONFIRMED``: a few upstream handlers (notably
+    ``Leaderboards.asmx/ReadByCrews`` and ``Presence.asmx/MultiPostMessage``)
+    return a plain declaration plus ``<Response><Status>1</Status>``.  Keep
+    those shapes separate from :func:`lso_response_xml`, which supplies the
+    xsd/xsi attributes used by most services.
+    """
+    root = _element(
+        "Response",
+        children=[_element("Status", str(status)), *list(children)],
+    )
+    return _serialise(root)
+
+
 def dynamic_results_xml(rows: Iterable[ET.Element], *, status: int = 1) -> str:
     """Build LSO-shaped ``DynamicResponse`` matchmaking results.
 
