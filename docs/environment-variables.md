@@ -41,6 +41,27 @@ enabled. `*.pem` and `*.key` are gitignored.
 | `GWSC_DB_NAME` | `gwsc.db` | Database filename inside `DATA_DIR`. |
 | `GWSC_LOG_DIR` | `gwsc_local_termux/logs` | Log directory. |
 | `GWSC_BACKUP_DIR` | `gwsc_local_termux/backups` | Backup directory. |
+| `GWSC_OBJECT_STORAGE_BACKEND` | `local` | `local` filesystem or `s3` (requires optional `boto3`). Unsupported values fail closed. |
+| `GWSC_OBJECT_STORAGE_DIR` | `<DATA_DIR>/objects` | Root for the local backend; object files are created with mode `0600`. |
+| `GWSC_OBJECT_STORAGE_BUCKET` | `gwsc` | Default bucket for saves, news images and profile shares. |
+| `GWSC_OBJECT_STORAGE_ENDPOINT` | *(empty)* | Required http(s) endpoint when the S3 backend is selected. Must not contain credentials. |
+| `GWSC_OBJECT_STORAGE_REGION` | `us-east-1` | S3 region. |
+| `GWSC_OBJECT_STORAGE_ACCESS_KEY` | *(empty)* | S3 access key id. Never logged. |
+| `GWSC_OBJECT_STORAGE_SECRET_KEY` | *(empty)* | S3 secret access key. Never logged. |
+| `GWSC_UGC_OBJECT_STORAGE_ENDPOINT` | main endpoint | Separate endpoint for UGC binaries. |
+| `GWSC_UGC_OBJECT_STORAGE_ACCESS_KEY` | main access key | Separate access key for UGC binaries. |
+| `GWSC_UGC_OBJECT_STORAGE_SECRET_KEY` | main secret key | Separate secret key for UGC binaries. |
+| `GWSC_UGC_OBJECT_STORAGE_BUCKET` | main bucket | Bucket for UGC mission/photo binaries. |
+| `GWSC_NEWS_OBJECT_STORAGE_BUCKET` | main bucket | Bucket for news images. |
+| `GWSC_UGC_DEFAULT_PHOTO_KEY` | `default_01.ugc` | Object key used when an image primary and fallback are both missing. |
+| `GWSC_OBJECT_MAX_BYTES` | `26214400` | Maximum stored object and cloud upload body size (25 MiB). |
+| `GWSC_PHOTO_UPLOAD_SECRET` | *(empty)* | Dedicated HMAC secret for UGC photo upload tokens. Required for uploads; never reused as a database password. |
+| `GWSC_PHOTO_UPLOAD_TOKEN_TTL` | `900` | Photo upload token lifetime in seconds. |
+
+Cloud upload paths (`/cloud/11/cloudservices/members/...`,
+`/cloud/11/cloudservices/ugc/gta5photo/upload/...` and `/ugc/gta5photo/...`)
+use `GWSC_OBJECT_MAX_BYTES` instead of `GWSC_MAX_BODY_BYTES`; all other routes
+keep the smaller REST limit.
 
 ## Accounts and sessions
 

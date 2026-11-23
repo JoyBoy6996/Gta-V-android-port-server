@@ -88,6 +88,65 @@ LOG_FILE = LOG_DIR / "gwsc.log"
 BACKUP_DIR = Path(os.getenv("GWSC_BACKUP_DIR", str(BASE_DIR / "backups")))
 BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
+# Cloud binary storage.  LSO uses S3 for save files, news images and UGC; this
+# project keeps a private local backend by default.  S3 credentials are read
+# from the environment only and are never logged or written to source.
+OBJECT_STORAGE_BACKEND = os.getenv("GWSC_OBJECT_STORAGE_BACKEND", "local").strip().lower()
+OBJECT_STORAGE_DIR = Path(
+    os.getenv("GWSC_OBJECT_STORAGE_DIR", str(DATA_DIR / "objects"))
+)
+OBJECT_STORAGE_BUCKET = (
+    os.getenv("GWSC_OBJECT_STORAGE_BUCKET", "gwsc").strip() or "gwsc"
+)
+OBJECT_STORAGE_ENDPOINT = os.getenv("GWSC_OBJECT_STORAGE_ENDPOINT", "").strip()
+OBJECT_STORAGE_REGION = (
+    os.getenv("GWSC_OBJECT_STORAGE_REGION", "us-east-1").strip() or "us-east-1"
+)
+OBJECT_STORAGE_ACCESS_KEY = os.getenv("GWSC_OBJECT_STORAGE_ACCESS_KEY", "")
+OBJECT_STORAGE_SECRET_KEY = os.getenv("GWSC_OBJECT_STORAGE_SECRET_KEY", "")
+# Upstream uses one client for saves/stats/news images and a separate client
+# for UGC.  Empty overrides fall back to the main credentials; the bucket is
+# always separated so a UGC write cannot overwrite a save or news image.
+UGC_OBJECT_STORAGE_ENDPOINT = (
+    os.getenv("GWSC_UGC_OBJECT_STORAGE_ENDPOINT", "").strip()
+    or OBJECT_STORAGE_ENDPOINT
+)
+UGC_OBJECT_STORAGE_ACCESS_KEY = (
+    os.getenv("GWSC_UGC_OBJECT_STORAGE_ACCESS_KEY", "")
+    or OBJECT_STORAGE_ACCESS_KEY
+)
+UGC_OBJECT_STORAGE_SECRET_KEY = (
+    os.getenv("GWSC_UGC_OBJECT_STORAGE_SECRET_KEY", "")
+    or OBJECT_STORAGE_SECRET_KEY
+)
+UGC_OBJECT_STORAGE_BUCKET = (
+    os.getenv("GWSC_UGC_OBJECT_STORAGE_BUCKET", "").strip()
+    or OBJECT_STORAGE_BUCKET
+)
+NEWS_OBJECT_STORAGE_BUCKET = (
+    os.getenv("GWSC_NEWS_OBJECT_STORAGE_BUCKET", "").strip()
+    or OBJECT_STORAGE_BUCKET
+)
+# LSO uses a fixed default UGC photo key; deployments may point this at their
+# own object.  No default binary is vendored because upstream has none.
+UGC_DEFAULT_PHOTO_KEY = (
+    os.getenv("GWSC_UGC_DEFAULT_PHOTO_KEY", "").strip() or "default_01.ugc"
+)
+# LSO caps photo uploads at 25 MiB; save files and other binaries use the same
+# boundary until per-route limits are source-confirmed.
+OBJECT_MAX_BYTES = _env_int("GWSC_OBJECT_MAX_BYTES", 25 * 1024 * 1024)
+# Cloud routes accept much larger bodies than the REST API.  The photo upload
+# aliases and save/profile-image POSTs are matched by prefix; GETs are not.
+CLOUD_UPLOAD_PATH_PREFIXES = (
+    "/cloud/11/cloudservices/members/",
+    "/cloud/11/cloudservices/ugc/gta5photo/upload/",
+    "/ugc/gta5photo/",
+)
+# Separate HMAC secret for UGC photo upload tokens.  It must not be reused as
+# a database password or any other credential.
+PHOTO_UPLOAD_SECRET = os.getenv("GWSC_PHOTO_UPLOAD_SECRET", "")
+PHOTO_UPLOAD_TOKEN_TTL_SECONDS = _env_int("GWSC_PHOTO_UPLOAD_TOKEN_TTL", 900)
+
 # ---------------------------------------------------------------------------
 # Accounts and sessions
 # ---------------------------------------------------------------------------

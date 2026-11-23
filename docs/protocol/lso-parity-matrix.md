@@ -45,9 +45,9 @@ account-bound credentials.
 | P2P / relay / presence servers | 4 | `ADAPTED` + `TESTED` |
 | stateless `.asmx` services | ~18 | Tranche 1 + `TESTED` |
 | social/profile/presence state | ~18 | Presence attributes/messages `ADAPTED` + `TESTED`; profile stats `PLANNED` |
-| saves / profile stats / UGC / news | ~25 | `PLANNED` |
+| saves / profile stats / UGC / news | ~25 | Saves/news/UGC binary `ADAPTED` + `TESTED`; profile stats `PLANNED` |
 | clans / leaderboards / inbox | ~17 | Clans/leaderboards `ADAPTED` + `TESTED`; inbox static `ADAPTED` + `TESTED` |
-| cloud binaries / static assets | ~30 | `PLANNED` |
+| cloud binaries / static assets | ~30 | Cloud persistence `ADAPTED` + `TESTED`; static assets `PLANNED` |
 | Discord bot | external process | `PLANNED` |
 
 ## Global and cloud routes
@@ -56,18 +56,18 @@ account-bound credentials.
 | --- | --- | --- | --- |
 | `GET /healthz` | inline | `ADAPTED` | `/health` already exists; add exact alias |
 | `POST /gta5/11/gameservices/Complaint.asmx/WriteComplaint` | inline stub | Tranche 1 | Static status response with valid XML |
-| `POST /cloud/11/cloudservices/members/{xbl\|sc\|np}/:id/GTA5/saves/mpstats` | `saves/savefiles.js`, S3 | `PLANNED` | Multipart save write; account from session ticket |
-| `GET /cloud/11/cloudservices/members/{xbl\|sc\|np}/:id/GTA5/saves/mpstats/:name` | `saves/savefiles.js`, S3 | `PLANNED` | Binary save read; `DoesNotExist` XML on miss |
+| `POST /cloud/11/cloudservices/members/{xbl\|sc\|np}/:id/GTA5/saves/mpstats` | `saves/savefiles.js`, S3 | `ADAPTED` + `TESTED` | Multipart save write; account from authenticated credential, safe filename |
+| `GET /cloud/11/cloudservices/members/{xbl\|sc\|np}/:id/GTA5/saves/mpstats/:name` | `saves/savefiles.js`, S3 | `ADAPTED` + `TESTED` | Binary save read; account-scoped key; `DoesNotExist` XML on miss |
 | `POST /gta5/11/gameservices/auth.asmx/CreateP2PCertificateCyprus` | `p2pCertificates/createP2PCertificate.js` | `PLANNED` | JSON identity fields are untrusted; needs authorization design |
 | `POST /gta5/11/gameservices/auth.asmx/CreateP2PCertificate` | `p2pCertificates/createP2PCertificate.js` | `ADAPTED` + `TESTED` | Existing `native_crypto` CA issuance, stricter signature validation |
-| `GET /cloud/11/cloudservices/ugc/gta5mission/:hash/:file` | `ugc/getMissionFile.js`, UGC S3 | `PLANNED` | Mission/photo binary with JPEG fallback |
-| `GET /cloud/11/cloudservices/ugc/gta5photo/:hash/:file` | `ugc/getMissionFile.js`, UGC S3 | `PLANNED` | Same handler |
-| `POST /cloud/11/cloudservices/ugc/gta5photo/upload/:contentId/:file` | `ugc/photoUpload.js`, UGC S3 | `PLANNED` | HMAC upload token, 900s expiry, 25MB cap |
-| `POST /ugc/gta5photo/:contentId/:file` | `ugc/photoUpload.js` | `PLANNED` | Alias |
-| `POST /cloud/11/cloudservices/members/np/:scId/share/gta5/mpchars` | inline, S3 | `PLANNED` | Upstream trusts path ID; port must authorize account |
-| `GET /cloud/11/cloudservices/titles/gta5/ps4/news/news.json` | `news/getNewsItems.js` | `PLANNED` | News DB |
-| `GET /cloud/11/cloudservices/global/sc/news/:storyKey/:langFile` | `news/getNewsItems.js` | `PLANNED` | News DB |
-| `GET /cloud/11/cloudservices/global/news/image/:newsId/:image` | `news/getNewsImage.js` | `PLANNED` | News binary storage |
+| `GET /cloud/11/cloudservices/ugc/gta5mission/:hash/:file` | `ugc/getMissionFile.js`, UGC S3 | `ADAPTED` + `TESTED` | Mission/photo binary with primary/fallback/default lookup |
+| `GET /cloud/11/cloudservices/ugc/gta5photo/:hash/:file` | `ugc/getMissionFile.js`, UGC S3 | `ADAPTED` + `TESTED` | Same handler; unpublished content is owner-scoped |
+| `POST /cloud/11/cloudservices/ugc/gta5photo/upload/:contentId/:file` | `ugc/photoUpload.js`, UGC S3 | `ADAPTED` + `TESTED` | Route-specific HMAC ACL, 900s expiry, 25MB cap, no debug dumps |
+| `POST /ugc/gta5photo/:contentId/:file` | `ugc/photoUpload.js` | `ADAPTED` + `TESTED` | Alias with its own ACL |
+| `POST /cloud/11/cloudservices/members/np/:scId/share/gta5/mpchars` | inline, S3 | `ADAPTED` + `TESTED` | Path id validated; storage scoped to authenticated account |
+| `GET /cloud/11/cloudservices/titles/gta5/ps4/news/news.json` | `news/getNewsItems.js` | `ADAPTED` + `TESTED` | Real active/date/expire filtering from `news` |
+| `GET /cloud/11/cloudservices/global/sc/news/:storyKey/:langFile` | `news/getNewsItems.js` | `ADAPTED` + `TESTED` | Source-confirmed story shape; `langFile` compatibility no-op |
+| `GET /cloud/11/cloudservices/global/news/image/:newsId/:image` | `news/getNewsImage.js` | `ADAPTED` + `TESTED` | News bucket profile; safe key; explicit 404 text |
 | `GET /cloud/11/cloudservices/crews/sc/:clanId/publish/emblem/emblem_:size.dds` | `clans/getCrewEmblem.js` | `PLANNED` | Stored emblem resized as JPEG |
 | `GET /cloud/11/cloudservices/titles/gta5/ps4/0x1a098062.json` | static tunables | `PLANNED` | Binary/static adapter |
 | `GET /cloud/11/cloudservices/titles/gta5/pcros/0x1a098062.json` | redirect | `PLANNED` | External production redirect |
@@ -175,7 +175,12 @@ These were implemented before the parity port and remain part of the matrix:
 - per-account ordered `presence_attributes` (`value_type`, `value_text`,
   `sort_order`) and `users.primary_clan_id` for primary-clan state.
 
-Object storage adapters (S3-compatible, local filesystem fallback) are needed
-for saves, profile stats, UGC, news images, and crew emblems. No production
-bucket names, credentials, or hardcoded encryption keys will be copied into the
-repository.
+`TESTED`: the local/S3-compatible adapter in `object_storage.py` validates every
+key component, scopes saves and shares to the authenticated internal account id,
+and keeps separate bucket profiles for UGC and news. S3 credentials and the
+photo-upload HMAC secret are environment-only. No production bucket names,
+credentials, or hardcoded encryption keys were copied into the repository.
+
+`UNVERIFIED`: the Android client has not yet been observed calling these cloud
+routes. Upstream RC4 response framing is deliberately not ported; native
+authentication uses the existing ticket/session-ticket plumbing.

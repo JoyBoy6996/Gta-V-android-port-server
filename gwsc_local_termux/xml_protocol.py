@@ -120,6 +120,33 @@ def lso_response_xml(
     return _serialise(root)
 
 
+def cloud_status_xml(*, status: int = 1, ms: str = "0") -> str:
+    """Build the well-formed equivalent of LSO's cloud save status string.
+
+    ``SOURCE_CONFIRMED``: upstream emits ``<Response ms="0"><Status>1<Status>``
+    (with an unclosed tag).  We keep the root attribute and status value but
+    serialise valid XML through ElementTree.
+    """
+    root = _element(
+        "Response",
+        children=[_element("Status", str(status))],
+        attributes={"ms": ms},
+    )
+    return _serialise(root)
+
+
+def cloud_error_xml(code: str, message: str = "") -> str:
+    """Build LSO's cloud ``<Error Code="..">message</Error>`` response."""
+    root = _element(
+        "Response",
+        children=[
+            _element("Status", "0"),
+            _element("Error", message, attributes={"Code": code}),
+        ],
+    )
+    return _serialise(root)
+
+
 def plain_response_xml(children: Iterable[ET.Element], *, status: int = 1) -> str:
     """Build a bare LSO ``<Response>`` without schema namespace attributes.
 

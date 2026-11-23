@@ -72,20 +72,23 @@ wire contract is still `UNVERIFIED`; see
 | `presence.py` | Heartbeat/expiry-based online state and the real online count. |
 | `validators.py` | Email, nickname, password and message-body validation. |
 | `xml_protocol.py` | Safe XML builders for native responses (no string concatenation). |
+| `object_storage.py` | Account-scoped object keys, local filesystem backend, optional S3-compatible backend. |
 | `multiplayer_relay.py` | Session-aware UDP registry, token bucket, counters, lifecycle. |
 | `maintenance.py` | Periodic cleanup loop and `run_cleanup_once()`. |
 | `capture.py` | Development request/response capture, redaction, body limit, request IDs, access log. |
 | `logging_utils.py` | Redaction filter for log records and exception text. |
 | `backup.py` | SQLite online backup/restore with integrity checks. |
 | `generate_certs.py` | Self-signed TLS certificate with SANs for local/LAN hosts. |
-| `routes/*.py` | HTTP and native endpoint handlers. |
+| `routes/lso.py`, `routes/lso_cloud.py` | LSO parity services: stateless/social/clan and S3-backed cloud routes. |
+| `routes/*.py` | Other HTTP and native endpoint handlers. |
 
 ## Request pipeline
 
 1. **CORS** (outermost) so error responses still carry CORS headers.
 2. **RequestID** assigns or sanitises `X-Request-ID`.
 3. **AccessLog** logs method, path, status, duration and request ID.
-4. **BodyLimit** rejects bodies larger than `GWSC_MAX_BODY_BYTES` with 413.
+4. **BodyLimit** rejects bodies larger than `GWSC_MAX_BODY_BYTES` with 413;
+   cloud upload paths use the larger `GWSC_OBJECT_MAX_BYTES` boundary.
 5. **Capture** (development only) writes a redacted JSONL record.
 6. **Router** validates input, authenticates, authorizes and runs SQL.
 7. **Exception handlers** normalise errors to a stable JSON shape.

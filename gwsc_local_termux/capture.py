@@ -199,6 +199,15 @@ class AccessLogMiddleware:
             )
 
 
+def _body_limit_for_path(path: str) -> int:
+    """Cloud binaries have their own (larger) upstream upload boundary."""
+    if any(
+        path.startswith(prefix) for prefix in config.CLOUD_UPLOAD_PATH_PREFIXES
+    ):
+        return config.OBJECT_MAX_BYTES
+    return config.MAX_BODY_BYTES
+
+
 class BodyLimitMiddleware:
     """Reject oversized request bodies before they reach a route."""
 
@@ -209,18 +218,19 @@ class BodyLimitMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        limit = _body_limit_for_path(scope.get("path", ""))
         headers = Headers(scope=scope)
         content_length = headers.get("content-length")
         if content_length:
             try:
-                if int(content_length) > config.MAX_BODY_BYTES:
+                if int(content_length) > limit:
                     await self._reject(scope, send)
                     return
             except ValueError:
                 await self._reject(scope, send)
                 return
 
-        body, exceeded = await _read_request_body(receive, config.MAX_BODY_BYTES)
+        body, exceeded = await _read_request_body(receive, limit)
         if exceeded:
             await self._reject(scope, send)
             return

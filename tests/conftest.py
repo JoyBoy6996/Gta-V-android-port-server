@@ -21,14 +21,21 @@ from gwsc_local_termux.server import app  # noqa: E402
 
 @pytest.fixture()
 def client(tmp_path):
+    original_db_path = config.DB_PATH
+    original_object_dir = config.OBJECT_STORAGE_DIR
     config.DB_PATH = tmp_path / "test.db"
+    config.OBJECT_STORAGE_DIR = tmp_path / "objects"
     database.init_db()
     relay_registry.clear()
     event_bus.reset()
     rate_limiter.reset()
     auth._last_touch.clear()
-    with TestClient(app) as test_client:
-        yield test_client
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        config.DB_PATH = original_db_path
+        config.OBJECT_STORAGE_DIR = original_object_dir
 
 
 @pytest.fixture()
